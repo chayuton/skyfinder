@@ -1,260 +1,215 @@
 import 'package:flutter/material.dart';
 
+import '../data/stars.dart';
 import '../engine/engine.dart';
 import '../engine/sky.dart';
-import '../painters/aim_painter.dart';
-import '../painters/sky_painter.dart';
+import '../painters/constellation_painter.dart';
 import '../state/app_state.dart';
 import 'theme.dart';
 
-class AimTabView extends StatefulWidget {
-  final AppState s;
-  final Scene sc;
-  const AimTabView({super.key, required this.s, required this.sc});
+const _filters = [
+  ('now', 'เหนือขอบฟ้าตอนนี้'),
+  ('night', 'คืนนี้'),
+  ('all', 'ทั้งหมด 40 กลุ่ม'),
+];
 
-  @override
-  State<AimTabView> createState() => _AimTabViewState();
+class ConRow {
+  final ConstellationData con;
+  final ConGeometry geo;
+  final RiseSet times;
+  final bool upTonight;
+  const ConRow(this.con, this.geo, this.times, this.upTonight);
 }
 
-class _AimTabViewState extends State<AimTabView> {
-  NearHit? _hit;
+class ConTabView extends StatelessWidget {
+  final AppState s;
+  final Scene sc;
+  final void Function(String conId) onOpen;
+  const ConTabView(
+      {super.key, required this.s, required this.sc, required this.onOpen});
+
+  List<ConRow> _rows() {
+    return memo(
+        'conrows|${minuteKey(sc.jd)}|${s.lat.toStringAsFixed(3)}'
+        '|${s.lon.toStringAsFixed(3)}|${s.height}',
+        _computeRows);
+  }
+
+  List<ConRow> _computeRows() {
+    final a = s.alm;
+    final out = <ConRow>[];
+    for (final con in constellationData) {
+      final geo = conGeometry(con, sc, s.lat, s.lon);
+      if (geo == null) continue;
+      final rd = altAzToEq(geo.altC, geo.azC, s.lat, s.lon, sc.jd);
+      final t = starRiseSet(rd.ra, rd.dec, a.jd0, s.lat, s.lon, s.height);
+      var up = geo.maxAlt > 10;
+      final dusk = a.ev.astro.dusk, dawn = a.evN.astro.dawn;
+      if (!up && dusk != null && dawn != null) {
+        for (var jd = dusk; jd <= dawn; jd += 1 / 24) {
+          if (eqToAltAz(rd.ra, rd.dec, s.lat, s.lon, jd).alt > 15) {
+            up = true;
+            break;
+          }
+        }
+      }
+      out.add(ConRow(con, geo, t, up));
+    }
+    return out;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.s;
-    final sc = widget.sc;
     final c = SkyColors.of(context);
-
-    final tgt = s.target;
-    final found = tgt != null ? findInScene(tgt, sc, s) : null;
-    var steer = '';
-    var sep = 0.0;
-    if (found != null) {
-      sep = angSep(s.aimAlt, s.aimAz, found.alt, found.az);
-      final dAz = norm180(found.az - s.aimAz);
-      final dAlt = found.alt - s.aimAlt;
-      if (sep < 4) {
-        steer = 'ตรงเป้าแล้ว';
-      } else {
-        final turn = dAz.abs() < 3
-            ? ''
-            : (dAz > 0
-                ? 'หมุนขวา ${dAz.abs().round()}°'
-                : 'หมุนซ้าย ${dAz.abs().round()}°');
-        final tilt = dAlt.abs() < 3
-            ? ''
-            : (dAlt > 0
-                ? 'เงยขึ้น ${dAlt.abs().round()}°'
-                : 'ก้มลง ${dAlt.abs().round()}°');
-        steer = [turn, tilt].where((x) => x.isNotEmpty).join(' · ');
-      }
+    final compact = compactPhone(context);
+    final rows = _rows();
+    var list = rows;
+    if (s.conFilter == 'now') {
+      list = rows.where((r) => r.geo.maxAlt > 8).toList();
+    } else if (s.conFilter == 'night') {
+      list = rows.where((r) => r.upTonight).toList();
     }
+    list.sort((x, y) => y.geo.altC.compareTo(x.geo.altC));
+    final dk = darkness(sc.sunAlt);
 
     return ListView(
-      padding: EdgeInsets.fromLTRB(16, 2, 16, 96 + MediaQuery.of(context).padding.bottom),
+      padding: EdgeInsets.fromLTRB(
+          compact ? 12 : 16, 2, compact ? 12 : 16, 96 + MediaQuery.of(context).padding.bottom),
       children: [
-        if (!s.sensorOn)
-          SkyCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('เล็งมือถือขึ้นฟ้า',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 6),
-                Text(
-                    'ยกมือถือขึ้นชี้ไปบนฟ้า แล้วแอปจะบอกว่าคุณกำลังเล็งไปที่ดาวดวงไหน '
-                    'ต้องใช้เข็มทิศและเซ็นเซอร์เอียงของเครื่อง',
-                    style: TextStyle(fontSize: 12.5, height: 1.5, color: c.muted)),
-                const SizedBox(height: 10),
-                FilledButton(
-                  onPressed: s.startSensors,
-                  child: const Text('เปิดเซ็นเซอร์ทิศทาง'),
-                ),
-                if (s.sensorNote.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Text(s.sensorNote,
-                        style: TextStyle(fontSize: 12, height: 1.5, color: c.muted)),
-                  ),
-              ],
-            ),
-          ),
-        Container(
-          margin: const EdgeInsets.only(top: 12),
-          decoration: BoxDecoration(
-            color: c.panel,
-            border: Border.all(color: c.line),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: LayoutBuilder(
-            builder: (_, box) {
-              final w = box.maxWidth;
-              final h = w * 4 / 3;
-              return SizedBox(
-                width: w,
-                height: h,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: AimPainter(sc, s, c, (hit) {
-                          // Painters run during layout, so defer the state
-                          // change to the next frame.
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted && hit?.name != _hit?.name) {
-                              setState(() => _hit = hit);
-                            }
-                          });
-                        }),
-                      ),
-                    ),
-                    Positioned(
-                      left: 12,
-                      right: 12,
-                      top: 12,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('ทิศ ${s.aimAz.round()}° ${compassTh(s.aimAz)}',
-                              style: TextStyle(
-                                  fontFamily: fMono, fontSize: 11.5, color: c.muted)),
-                          Text('เงย ${s.aimAlt.round()}°',
-                              style: TextStyle(
-                                  fontFamily: fMono, fontSize: 11.5, color: c.muted)),
-                        ],
-                      ),
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(14, 26, 14, 12),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              c.ink.withOpacity(0),
-                              c.ink.withOpacity(0.8),
-                              c.ink.withOpacity(0.93),
-                            ],
-                            stops: const [0, 0.42, 1],
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(_hit?.name ?? 'ไม่มีวัตถุเด่นตรงนี้',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontFamily: fDisplay,
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.w700,
-                                    color: c.fg)),
-                            Text(
-                                _hit != null
-                                    ? '${_hit!.sub} · โชติมาตร ${_hit!.mag.toStringAsFixed(1)}'
-                                        ' · ห่างจากจุดเล็ง ${_hit!.sep.toStringAsFixed(1)}°'
-                                    : 'กวาดมือถือไปรอบ ๆ ช้า ๆ',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 12, color: c.muted)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-        if (!s.sensorOn)
-          SkyCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Eyebrow('ปรับเอง'),
-                const SizedBox(height: 6),
-                _slider(context, 'ทิศ (อะซิมุท)',
-                    '${s.aimAz.round()}° ${compassShort(s.aimAz)}',
-                    s.aimAz, 0, 359, (v) => s.setAim(s.aimAlt, v)),
-                _slider(context, 'มุมเงย', '${s.aimAlt.round()}°',
-                    s.aimAlt, 0, 90, (v) => s.setAim(v, s.aimAz)),
-              ],
-            ),
-          ),
         SkyCard(
+          padding: EdgeInsets.fromLTRB(compact ? 11 : 14, compact ? 10 : 13, compact ? 11 : 14, compact ? 10 : 13),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('นำทางไปหาเป้าหมาย',
-                  style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 4),
-              if (tgt == null)
-                Text(
-                    'ยังไม่ได้เลือกเป้าหมาย — เลือกจากแท็บรายการ หรือแตะดาวบนแผนที่ฟ้า',
-                    style: TextStyle(fontSize: 12.5, color: c.muted))
-              else ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text('${sep.round()}°',
-                        style: TextStyle(
-                            fontFamily: fDisplay,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            color: sep < 4 ? c.up : c.amber)),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(steer, style: TextStyle(fontSize: 14, color: c.fg)),
-                          Text(
-                              found != null && found.alt > 0
-                                  ? 'อยู่ทาง${compassTh(found.az)} '
-                                      'สูง ${refract(found.alt).round()}°'
-                                  : 'เป้าหมายอยู่ใต้ขอบฟ้าตอนนี้',
-                              style: TextStyle(fontSize: 12.5, color: c.muted)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  onPressed: () => s.setTarget(null),
-                  child: const Text('ยกเลิกเป้าหมาย'),
-                ),
+              Text('ผังกลุ่มดาว', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 5),
+              Text(
+                  'แต่ละผังวาดตามมุมที่กลุ่มดาวนั้นเอียงอยู่จริงบนฟ้าขณะนี้ '
+                  'ไม่ใช่รูปตั้งตรงแบบในตำรา หันหน้าไปตามทิศที่บอกแล้วเทียบกับตัวเลข',
+                  style: TextStyle(
+                      fontSize: compact ? 12 : 12.5,
+                      height: 1.5,
+                      color: c.muted)),
+            ],
+          ),
+        ),
+        SizedBox(height: compact ? 8 : 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final f in _filters) ...[
+                Tog(f.$2, s.conFilter == f.$1, () => s.setConFilter(f.$1)),
+                const SizedBox(width: 6),
               ],
             ],
           ),
+        ),
+        if (list.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 2),
+            child: Text(
+                'ไม่มีกลุ่มดาวในเงื่อนไขนี้ ลองเปลี่ยนเป็น “คืนนี้” หรือ “ทั้งหมด”',
+                style: TextStyle(fontSize: 12.5, color: c.muted)),
+          ),
+        for (final r in list) _card(context, r, dk),
+        Padding(
+          padding: const EdgeInsets.only(top: 22, bottom: 10),
+          child: Text('แตะที่การ์ดเพื่อดูผังขนาดใหญ่ ชื่อดาวแต่ละดวง และวิธีสังเกต',
+              style: TextStyle(
+                  fontSize: compact ? 10.8 : 11.5,
+                  height: 1.6,
+                  color: c.dim)),
         ),
       ],
     );
   }
 
-  Widget _slider(BuildContext context, String label, String value, double v,
-      double min, double max, ValueChanged<double> onChanged) {
+  Widget _card(BuildContext context, ConRow r, double dk) {
     final c = SkyColors.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final compact = compactPhone(context);
+    final narrow = MediaQuery.of(context).size.width < 360;
+    final fig = narrow ? 68.0 : 82.0;
+
+    final Widget pill = r.geo.altC > 8
+        ? (dk > 0.25
+            ? const Pill('เห็นได้ตอนนี้', 'up')
+            : const Pill('ฟ้ายังสว่าง', 'am'))
+        : r.geo.maxAlt > 0
+            ? const Pill('โผล่ขอบฟ้า', 'am')
+            : r.upTonight
+                ? Pill('ขึ้น ${fmtTime(r.times.rise)}', 'am')
+                : const Pill('คืนนี้ไม่ขึ้น', 'dn');
+
+    final where = r.geo.altC > 0
+        ? 'ทาง${compassTh(r.geo.azC)} · สูง ${r.geo.altC.round()}°'
+        : 'ดีที่สุดเวลา ${fmtTime(r.times.transit)}';
+
+    return GestureDetector(
+      onTap: () => onOpen(r.con.id),
+      child: Container(
+        margin: EdgeInsets.only(top: compact ? 8 : 9),
+        padding: EdgeInsets.fromLTRB(compact ? 9 : 10, 10, compact ? 10 : 12, 10),
+        decoration: BoxDecoration(
+          color: c.panel,
+          border: Border.all(color: c.line),
+          borderRadius: BorderRadius.circular(compact ? 12 : 14),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(label, style: TextStyle(fontSize: 12, color: c.muted)),
-            Text(value,
-                style: TextStyle(fontSize: 12, fontFamily: fMono, color: c.muted)),
+            Container(
+              width: fig,
+              height: fig,
+              decoration: BoxDecoration(
+                color: c.panel2,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: CustomPaint(
+                  painter: ConstellationPainter(r.con, r.geo, c, s.nightMode)),
+            ),
+            SizedBox(width: narrow ? 9 : 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text('กลุ่มดาว${r.con.th}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: compact ? 13.5 : 14.5,
+                                fontWeight: FontWeight.w600,
+                                color: c.fg)),
+                      ),
+                      const SizedBox(width: 8),
+                      pill,
+                    ],
+                  ),
+                  const SizedBox(height: 1),
+                  Text('${r.con.en} · สว่างสุด ${r.geo.bright.star.shortTh}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: compact ? 10.7 : 11.5,
+                          color: c.muted)),
+                  const SizedBox(height: 4),
+                  Text(where,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: compact ? 10.7 : 11.5,
+                          fontFamily: fMono,
+                          color: c.amber)),
+                ],
+              ),
+            ),
           ],
         ),
-        Slider(
-            value: v.clamp(min, max),
-            min: min,
-            max: max,
-            onChanged: onChanged),
-      ],
+      ),
     );
   }
 }

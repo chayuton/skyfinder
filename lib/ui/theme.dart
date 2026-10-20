@@ -35,6 +35,8 @@ const String fDisplay = 'BaiJamjuree';
 const String fBody = 'IBMPlexSansThai';
 const String fMono = 'IBMPlexMono';
 
+bool compactPhone(BuildContext context) => MediaQuery.sizeOf(context).width < 360;
+
 ThemeData skyTheme(Sky c) {
   return ThemeData(
     brightness: Brightness.dark,
@@ -89,14 +91,15 @@ class SkyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = SkyColors.of(context);
+    final compact = compactPhone(context);
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(top: 12),
+      margin: EdgeInsets.only(top: compact ? 8 : 12),
       padding: padding,
       decoration: BoxDecoration(
         color: c.panel,
         border: Border.all(color: c.line),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(compact ? 12 : 16),
       ),
       child: child,
     );
@@ -110,17 +113,22 @@ class Pill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = compactPhone(context);
     final c = SkyColors.of(context);
     final col = kind == 'up' ? c.up : (kind == 'am' ? c.amber : c.down);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+      padding: EdgeInsets.symmetric(
+          horizontal: compact ? 7 : 8, vertical: compact ? 1 : 1),
       decoration: BoxDecoration(
         color: kind == 'dn' ? null : col.withOpacity(0.08),
         border: Border.all(color: col.withOpacity(0.35)),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(text,
-          style: TextStyle(fontSize: 10.5, color: col, letterSpacing: 0.3)),
+          style: TextStyle(
+              fontSize: compact ? 9.5 : 10.5,
+              color: col,
+              letterSpacing: 0.3)),
     );
   }
 }
@@ -135,11 +143,13 @@ class Tog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = compactPhone(context);
     final c = SkyColors.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+        padding: EdgeInsets.symmetric(
+            horizontal: compact ? 9 : 11, vertical: compact ? 4 : 5),
         decoration: BoxDecoration(
           color: on ? c.panel2 : c.panel,
           border: Border.all(
@@ -148,7 +158,7 @@ class Tog extends StatelessWidget {
         ),
         child: Text(label,
             style: TextStyle(
-                fontSize: 12,
+                fontSize: compact ? 11.2 : 12,
                 color: on ? (hot ? c.amber : c.fg) : c.muted)),
       ),
     );
@@ -163,8 +173,9 @@ class Kv extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = SkyColors.of(context);
+    final compact = compactPhone(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
+      padding: EdgeInsets.only(top: compact ? 8 : 10),
       child: Column(
         children: [
           for (final r in rows)
@@ -173,17 +184,18 @@ class Kv extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(r.$1, style: TextStyle(fontSize: 13, color: c.muted)),
-                  const SizedBox(width: 14),
+                  Text(r.$1,
+                      style: TextStyle(
+                          fontSize: compact ? 12 : 13, color: c.muted)),
+                  SizedBox(width: compact ? 8 : 14),
                   Expanded(
                     child: Text(r.$2,
                         textAlign: TextAlign.right,
                         style: TextStyle(
                             fontFamily: fMono,
-                            fontSize: 13,
+                            fontSize: compact ? 12 : 13,
                             color: c.fg,
-                            fontFeatures: const [FontFeature.tabularFigures()])),
-                  ),
+                            fontFeatures: const [FontFeature.tabularFigures()]))),
                 ],
               ),
             ),
@@ -199,8 +211,9 @@ class Hint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = SkyColors.of(context);
+    final compact = compactPhone(context);
     return Container(
-      margin: const EdgeInsets.only(top: 12),
+      margin: EdgeInsets.only(top: compact ? 8 : 12),
       padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
       decoration: BoxDecoration(
         color: c.panel2,
@@ -208,7 +221,10 @@ class Hint extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: DefaultTextStyle(
-        style: TextStyle(fontSize: 12.5, height: 1.6, color: c.muted),
+        style: TextStyle(
+            fontSize: compact ? 12 : 12.5,
+            height: 1.6,
+            color: c.muted),
         child: child,
       ),
     );
@@ -227,3 +243,4 @@ class SkyColors extends InheritedWidget {
   @override
   bool updateShouldNotify(SkyColors old) => old.colors != colors;
 }
+

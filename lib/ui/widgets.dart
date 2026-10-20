@@ -27,18 +27,20 @@ class ObjectRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = SkyColors.of(context);
+    final compact = compactPhone(context);
+    final badgeSize = compact ? 22.0 : 26.0;
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
+        padding: EdgeInsets.symmetric(vertical: compact ? 8 : 9, horizontal: 2),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: c.line)),
         ),
         child: Row(
           children: [
             Container(
-              width: 26,
-              height: 26,
+              width: badgeSize,
+              height: badgeSize,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: colour.withOpacity(0.13),
@@ -46,9 +48,12 @@ class ObjectRow extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Text(badge,
-                  style: TextStyle(fontSize: 11, color: colour, fontFamily: fMono)),
+                  style: TextStyle(
+                      fontSize: compact ? 10 : 11,
+                      color: colour,
+                      fontFamily: fMono)),
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: compact ? 8 : 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -57,27 +62,33 @@ class ObjectRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600, color: c.fg)),
+                          fontSize: compact ? 13 : 14,
+                          fontWeight: FontWeight.w600,
+                          color: c.fg)),
                   Text(sub,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11.5, color: c.muted)),
+                      style: TextStyle(
+                          fontSize: compact ? 10.5 : 11.5,
+                          color: c.muted)),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: compact ? 6 : 8),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(right,
                     style: TextStyle(
                         fontFamily: fMono,
-                        fontSize: 13,
+                        fontSize: compact ? 12 : 13,
                         color: belowHorizon ? c.down : c.fg,
                         fontFeatures: const [FontFeature.tabularFigures()])),
                 Text(sub2,
                     style: TextStyle(
-                        fontFamily: fMono, fontSize: 10.5, color: c.muted)),
+                        fontFamily: fMono,
+                        fontSize: compact ? 9.5 : 10.5,
+                        color: c.muted)),
               ],
             ),
           ],
@@ -97,18 +108,21 @@ class AimDial extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = SkyColors.of(context);
+    final compact = compactPhone(context);
+    final dialSize = compact ? 68.0 : 80.0;
+    final quadWidth = compact ? 54.0 : 60.0;
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: EdgeInsets.only(top: compact ? 8 : 12),
       child: Row(
         children: [
           SizedBox(
-              width: 80,
-              height: 80,
+              width: dialSize,
+              height: dialSize,
               child: CustomPaint(painter: _DialPainter(az, up ? c.amber : c.down, c))),
-          const SizedBox(width: 10),
+          SizedBox(width: compact ? 8 : 10),
           SizedBox(
-              width: 60,
-              height: 80,
+              width: quadWidth,
+              height: dialSize,
               child: CustomPaint(
                   painter: _QuadrantPainter(alt, up ? c.amber : c.down, c))),
         ],
