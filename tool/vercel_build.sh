@@ -28,7 +28,30 @@ flutter config --no-analytics >/dev/null 2>&1 || true
 
 ./tool/prepare_platforms.sh web
 flutter pub get
-flutter build web --release
+
+# By default the web build leaves CanvasKit on Google's CDN: the page ships
+# only an engine revision, and the loader turns that into a
+# www.gstatic.com/flutter-canvaskit/<revision>/ URL it fetches at runtime.
+# Nothing renders until that fetch lands, so any device that cannot reach
+# gstatic -- a content blocker, a filtering DNS, a captive or corporate
+# network, Lockdown Mode -- sits on the splash screen forever while the same
+# build works fine on the developer's machine. The flag puts the same files
+# under our own origin, which we already serve and already cache.
+BUILD_ARGS=(--release)
+if flutter build web --help 2>&1 | grep -q -- '--no-web-resources-cdn'; then
+  BUILD_ARGS+=(--no-web-resources-cdn)
+  echo "==> CanvasKit will be served from our own origin"
+else
+  echo "==> WARNING: this SDK has no --no-web-resources-cdn;"
+  echo "    the build will depend on www.gstatic.com at runtime"
+fi
+
+flutter build web "${BUILD_ARGS[@]}"
+
+# The output check is what actually guards the deploy: a web build succeeds
+# whether or not the overlay landed and whether or not CanvasKit ended up
+# local, so without this a broken page would ship green.
+python3 tool/check_web_output.py build/web
 
 echo "==> build/web is ready"
 ls -la build/web | head -20

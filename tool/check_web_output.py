@@ -51,6 +51,41 @@ def main(out_dir: str) -> int:
         if 'A new Flutter project' in html:
             problems.append('index.html still has the stock Flutter description')
 
+    boot = out / 'flutter_bootstrap.js'
+    if boot.exists():
+        js = boot.read_text(encoding='utf-8', errors='replace')
+        # Without --no-web-resources-cdn the page ships only an engine
+        # revision and the loader turns that into a www.gstatic.com URL it
+        # fetches before it can paint anything. Any device that cannot reach
+        # that host sits on the splash forever while the build looks fine
+        # everywhere else, so a deploy that would do it fails here instead.
+        if 'useLocalCanvasKit' in js:
+            checks.append('CanvasKit is served from our own origin')
+        else:
+            problems.append(
+                'flutter_bootstrap.js has no useLocalCanvasKit, so the engine '
+                'will fetch CanvasKit from www.gstatic.com at runtime and the '
+                'app will not start on any device that cannot reach it '
+                '(build with --no-web-resources-cdn)')
+        for name in ('canvaskit/canvaskit.js', 'canvaskit/canvaskit.wasm'):
+            need(name)
+
+    if index is not None:
+        head, _, rest = html.partition('</head>')
+        if 'id="skyfinder-loader"' in head:
+            problems.append(
+                'the splash markup sits inside <head>, which makes the parser '
+                'close the head early and discard the real <body> tag')
+        elif 'id="skyfinder-loader"' in rest:
+            checks.append('splash markup is in the body where it belongs')
+        else:
+            problems.append('index.html has no splash markup at all')
+        if 'skyfinder-loader-detail' in html:
+            checks.append('splash can report a failed engine start')
+        else:
+            problems.append('splash has no failure reporting, so a dead engine '
+                            'will look like a frozen progress bar')
+
     if manifest is not None:
         try:
             m = json.loads(manifest.read_text(encoding='utf-8'))
