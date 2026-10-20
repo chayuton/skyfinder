@@ -86,12 +86,19 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: build web
+      # Run the very script Vercel runs, pointed at the Flutter the runner
+      # already has, so the deploy path itself is under test rather than a
+      # lookalike sequence of commands.
+      - name: build web through the Vercel script
         run: |
           set -o pipefail
-          ./tool/prepare_platforms.sh web 2>&1 | tee -a /tmp/ci.log
-          flutter pub get 2>&1 | tee -a /tmp/ci.log
-          flutter build web --release 2>&1 | tee -a /tmp/ci.log
+          export FLUTTER_HOME="$(dirname "$(dirname "$(command -v flutter)")")"
+          echo "FLUTTER_HOME=$FLUTTER_HOME" | tee -a /tmp/ci.log
+          bash tool/vercel_build.sh 2>&1 | tee -a /tmp/ci.log
+      - name: check the web overlay actually landed
+        run: |
+          set -o pipefail
+          python3 tool/check_web_output.py build/web 2>&1 | tee -a /tmp/ci.log
       - uses: actions/upload-artifact@v4
         with:
           name: skyfinder-web
