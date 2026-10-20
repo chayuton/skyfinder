@@ -71,7 +71,7 @@ EXTRA = SENTINEL + '''
       border: 1px solid rgba(255,255,255,0.14);
       box-shadow: inset 0 0 18px rgba(152, 188, 255, 0.22), 0 0 34px rgba(111, 143, 255, 0.18);
       position: relative;
-      animation: skyfinder-spin 1.6s linear infinite;
+      animation: skyfinder-spin 1.8s linear infinite;
     }
     .skyfinder-loader-orbit::before,
     .skyfinder-loader-orbit::after {
@@ -159,12 +159,12 @@ EXTRA = SENTINEL + '''
     <div class="skyfinder-loader-shell">
       <div class="skyfinder-loader-orbit"></div>
       <div class="skyfinder-loader-title">ดาวนำทาง</div>
-      <div class="skyfinder-loader-sub">กำลังโหลดท้องฟ้า…</div>
+      <div id="skyfinder-loader-status" class="skyfinder-loader-sub">เช็กสิทธิ์ตำแหน่ง…</div>
       <div class="skyfinder-loader-progress-wrap">
         <div class="skyfinder-loader-progress-bar" aria-hidden="true">
           <div id="skyfinder-loader-progress-fill" class="skyfinder-loader-progress-fill"></div>
         </div>
-        <div id="skyfinder-loader-progress-text" class="skyfinder-loader-progress-text">8%</div>
+        <div id="skyfinder-loader-progress-text" class="skyfinder-loader-progress-text">10%</div>
       </div>
     </div>
   </div>
@@ -173,26 +173,52 @@ EXTRA = SENTINEL + '''
       const loader = document.getElementById('skyfinder-loader');
       const fill = document.getElementById('skyfinder-loader-progress-fill');
       const text = document.getElementById('skyfinder-loader-progress-text');
+      const status = document.getElementById('skyfinder-loader-status');
       const canvas = document.getElementById('skyfinder-loader-canvas');
-      if (!loader || !fill || !text || !canvas) return;
+      if (!loader || !fill || !text || !canvas || !status) return;
 
       const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
       const slowNetwork = connection && ['slow-2g', '2g', '3g'].includes(connection.effectiveType);
-      const longDelay = slowNetwork || window.innerWidth < 420;
-      const startDelay = longDelay ? 1600 : 600;
-      const maxDelay = longDelay ? 11000 : 7000;
+      const isMobile = window.innerWidth < 768 || navigator.userAgent.includes('Mobile');
+      const longDelay = slowNetwork || isMobile;
+      const startDelay = longDelay ? 1200 : 500;
+      const maxDelay = longDelay ? 12000 : 8000;
+
+      const phases = [
+        ['เริ่มต้นระบบท้องฟ้า…', 14],
+        ['โหลดสถิติดาว…', 32],
+        ['เช็กสิทธิ์ตำแหน่ง…', 54],
+        ['ประมวลผลตำแหน่ง…', 76],
+        ['พร้อมแสดงฟ้า…', 100],
+      ];
 
       const hideLoader = () => {
         if (loader.classList.contains('hidden')) return;
         loader.classList.add('hidden');
-        window.setTimeout(() => loader.remove(), 280);
+        window.setTimeout(() => loader.remove(), 320);
+      };
+
+      const updatePhase = (targetPercent, targetText) => {
+        fill.style.width = targetPercent + '%';
+        text.textContent = targetPercent + '%';
+        status.textContent = targetText;
       };
 
       const drawStars = () => {
-        if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
+
+        const starCount = Math.min(150, Math.max(80, Math.round(window.innerWidth / 9)));
+        const stars = Array.from({ length: starCount }, () => ({
+          x: Math.random() * window.innerWidth,
+          y: Math.random() * window.innerHeight,
+          radius: Math.random() * 2.1 + 0.6,
+          alpha: Math.random() * 0.9 + 0.2,
+          drift: Math.random() * 0.7 + 0.3,
+          vx: (Math.random() - 0.5) * 0.15,
+          vy: (Math.random() - 0.5) * 0.15,
+        }));
 
         const resize = () => {
           const ratio = window.devicePixelRatio || 1;
@@ -203,27 +229,28 @@ EXTRA = SENTINEL + '''
           ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
         };
 
-        const stars = Array.from({ length: Math.min(120, Math.max(52, Math.round(window.innerWidth / 12))) }, () => ({
-          x: Math.random() * window.innerWidth,
-          y: Math.random() * window.innerHeight,
-          r: Math.random() * 2.1 + 0.5,
-          a: Math.random() * 0.9 + 0.15,
-          drift: Math.random() * 0.6 + 0.2,
-        }));
-
-        const render = () => {
+        const render = (time) => {
           ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
           for (const star of stars) {
-            const alpha = star.a + Math.sin((performance.now() * 0.0013 + star.x) * star.drift) * 0.35;
+            star.x += star.vx + Math.sin((time * 0.001) * star.drift + star.y) * 0.08;
+            star.y += star.vy + Math.cos((time * 0.001) * star.drift + star.x) * 0.08;
+
+            if (star.x < -10) star.x = window.innerWidth + 10;
+            if (star.x > window.innerWidth + 10) star.x = -10;
+            if (star.y < -10) star.y = window.innerHeight + 10;
+            if (star.y > window.innerHeight + 10) star.y = -10;
+
+            const alpha = star.alpha + Math.sin((time * 0.0013) + star.x * 0.03) * 0.35;
             ctx.beginPath();
-            ctx.fillStyle = 'rgba(255,255,255,' + Math.min(1, Math.max(0.15, alpha)) + ')';
-            ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,255,255,' + Math.min(1, Math.max(0.12, alpha)) + ')';
+            ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
             ctx.fill();
-            if (Math.random() < 0.009) {
+
+            if (Math.random() < 0.02) {
               ctx.beginPath();
-              ctx.strokeStyle = 'rgba(162, 194, 255, 0.28)';
+              ctx.strokeStyle = 'rgba(150, 180, 255, 0.25)';
               ctx.moveTo(star.x, star.y);
-              ctx.lineTo(star.x + 18, star.y - 12);
+              ctx.lineTo(star.x + 18 + star.radius * 5, star.y - 12);
               ctx.stroke();
             }
           }
@@ -232,49 +259,50 @@ EXTRA = SENTINEL + '''
 
         resize();
         window.addEventListener('resize', resize, { passive: true });
-        render();
+        requestAnimationFrame(render);
       };
 
       if (!prefersReducedMotion) {
         drawStars();
       }
 
-      const startAt = performance.now();
+      let progressStart = performance.now();
       const tick = (now) => {
-        const elapsed = now - startAt;
+        const elapsed = now - progressStart;
         const ratio = Math.min(1, elapsed / maxDelay);
-        const percent = Math.min(98, Math.max(8, Math.round(8 + ratio * 90)));
-        fill.style.width = percent + '%';
-        text.textContent = percent + '%';
+        const phaseIndex = Math.min(phases.length - 1, Math.floor(ratio * (phases.length - 1)));
+        const [phaseText, phaseTarget] = phases[phaseIndex];
+        const smoothPercent = Math.min(99, Math.round(phaseTarget + ((ratio * 100) - phaseTarget) * 0.25));
+        updatePhase(smoothPercent, phaseText);
 
         if (ratio < 1) {
           requestAnimationFrame(tick);
         }
       };
 
-      window.setTimeout(() => requestAnimationFrame(tick), startDelay);
+      window.setTimeout(() => {
+        progressStart = performance.now();
+        requestAnimationFrame(tick);
+      }, startDelay);
 
       if (prefersReducedMotion) {
-        fill.style.width = '100%';
-        text.textContent = '100%';
+        updatePhase(100, 'พร้อมแสดงฟ้า…');
         hideLoader();
         return;
       }
 
       window.addEventListener('flutter-first-frame', () => {
-        fill.style.width = '100%';
-        text.textContent = '100%';
+        updatePhase(100, 'พร้อมแสดงฟ้า…');
         window.setTimeout(hideLoader, longDelay ? 1800 : 900);
       }, { once: true });
 
       window.addEventListener('load', () => {
         window.setTimeout(() => {
           if (!loader.classList.contains('hidden')) {
-            fill.style.width = '100%';
-            text.textContent = '100%';
-            window.setTimeout(hideLoader, longDelay ? 1500 : 700);
+            updatePhase(100, 'พร้อมแสดงฟ้า…');
+            window.setTimeout(hideLoader, longDelay ? 1400 : 700);
           }
-        }, longDelay ? 3500 : 1800);
+        }, longDelay ? 2500 : 1200);
       }, { once: true });
     })();
   </script>
