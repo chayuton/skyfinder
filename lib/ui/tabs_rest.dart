@@ -2,272 +2,245 @@ import 'package:flutter/material.dart';
 
 import '../engine/engine.dart';
 import '../engine/sky.dart';
-import '../painters/aim_painter.dart';
 import '../painters/sky_painter.dart';
 import '../state/app_state.dart';
 import 'theme.dart';
+import 'widgets.dart';
 
-class AimTabView extends StatefulWidget {
+class SkyTabView extends StatelessWidget {
   final AppState s;
   final Scene sc;
-  const AimTabView({super.key, required this.s, required this.sc});
-
-  @override
-  State<AimTabView> createState() => _AimTabViewState();
-}
-
-class _AimTabViewState extends State<AimTabView> {
-  NearHit? _hit;
+  final void Function(Selection) onPick;
+  const SkyTabView(
+      {super.key, required this.s, required this.sc, required this.onPick});
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.s;
-    final sc = widget.sc;
     final c = SkyColors.of(context);
     final compact = compactPhone(context);
-
-    final tgt = s.target;
-    final found = tgt != null ? findInScene(tgt, sc, s) : null;
-    var steer = '';
-    var sep = 0.0;
-    if (found != null) {
-      sep = angSep(s.aimAlt, s.aimAz, found.alt, found.az);
-      final dAz = norm180(found.az - s.aimAz);
-      final dAlt = found.alt - s.aimAlt;
-      if (sep < 4) {
-        steer = 'ตรงเป้าแล้ว';
-      } else {
-        final turn = dAz.abs() < 3
-            ? ''
-            : (dAz > 0
-                ? 'หมุนขวา ${dAz.abs().round()}°'
-                : 'หมุนซ้าย ${dAz.abs().round()}°');
-        final tilt = dAlt.abs() < 3
-            ? ''
-            : (dAlt > 0
-                ? 'เงยขึ้น ${dAlt.abs().round()}°'
-                : 'ก้มลง ${dAlt.abs().round()}°');
-        steer = [turn, tilt].where((x) => x.isNotEmpty).join(' · ');
-      }
-    }
-
+    final wide = landscapeLikeLayout(context);
+    final timeButtons = Wrap(
+      spacing: compact ? 4 : 5,
+      runSpacing: compact ? 4 : 5,
+      alignment: WrapAlignment.end,
+      children: [
+        _step(context, '−1ชม', () => s.nudgeOffset(-60)),
+        _step(context, '−10น', () => s.nudgeOffset(-10)),
+        _step(context, 'ตอนนี้', () => s.setOffset(0)),
+        _step(context, '+10น', () => s.nudgeOffset(10)),
+        _step(context, '+1ชม', () => s.nudgeOffset(60)),
+      ],
+    );
     return ListView(
       padding: EdgeInsets.fromLTRB(
           compact ? 12 : 16, 2, compact ? 12 : 16, 96 + MediaQuery.of(context).padding.bottom),
       children: [
-        if (!s.sensorOn)
-          SkyCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('เล็งมือถือขึ้นฟ้า',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 6),
-                Text(
-                    'ยกมือถือขึ้นชี้ไปบนฟ้า แล้วแอปจะบอกว่าคุณกำลังเล็งไปที่ดาวดวงไหน '
-                    'ต้องใช้เข็มทิศและเซ็นเซอร์เอียงของเครื่อง',
-                    style: TextStyle(
-                        fontSize: compact ? 12 : 12.5,
-                        height: 1.5,
-                        color: c.muted)),
-                const SizedBox(height: 10),
-                FilledButton(
-                  onPressed: s.startSensors,
-                  child: const Text('เปิดเซ็นเซอร์ทิศทาง'),
-                ),
-                if (s.sensorNote.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Text(s.sensorNote,
-                        style: TextStyle(fontSize: 12, height: 1.5, color: c.muted)),
-                  ),
-              ],
-            ),
-          ),
-        Container(
-          margin: EdgeInsets.only(top: compact ? 8 : 12),
-          decoration: BoxDecoration(
-            color: c.panel,
-            border: Border.all(color: c.line),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: LayoutBuilder(
-            builder: (_, box) {
-              final w = box.maxWidth;
-              final h = w * (compact ? 0.85 : 4 / 3);
-              return SizedBox(
+        LayoutBuilder(
+          builder: (_, box) {
+            final w = box.maxWidth;
+            return GestureDetector(
+              onTapUp: (d) => _tap(d.localPosition, w),
+              child: SizedBox(
                 width: w,
-                height: h,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: AimPainter(sc, s, c, (hit) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted && hit?.name != _hit?.name) {
-                              setState(() => _hit = hit);
-                            }
-                          });
-                        }),
-                      ),
+                height: w,
+                child: CustomPaint(painter: SkyDomePainter(sc, s, c)),
+              ),
+            );
+          },
+        ),
+        SizedBox(height: compact ? 8 : 10),
+        Wrap(
+          spacing: compact ? 5 : 6,
+          runSpacing: compact ? 5 : 6,
+          children: [
+            Tog('เส้นกลุ่มดาว', s.lines, () => s.toggle('lines')),
+            Tog('ชื่อดาว', s.names, () => s.toggle('names')),
+            Tog('ทางช้างเผือก', s.milky, () => s.toggle('milky')),
+            Tog('เส้นสุริยวิถี', s.ecliptic, () => s.toggle('ecliptic')),
+            Tog('หมุนตามเข็มทิศ', s.faceLock, () => s.toggle('faceLock'), hot: true),
+          ],
+        ),
+        SkyCard(
+          padding: EdgeInsets.fromLTRB(compact ? 11 : 13, compact ? 9 : 11, compact ? 11 : 13, compact ? 10 : 13),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: crossAxisAlignmentForTablet(wide),
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Eyebrow(fmtDate(s.now)),
+                        Text(fmtClock(s.now),
+                            style: TextStyle(
+                                fontFamily: fMono,
+                                fontSize: compact ? 15 : 17,
+                                color: c.fg)),
+                      ],
                     ),
-                    Positioned(
-                      left: 12,
-                      right: 12,
-                      top: 12,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('ทิศ ${s.aimAz.round()}° ${compassTh(s.aimAz)}',
-                              style: TextStyle(
-                                  fontFamily: fMono,
-                                  fontSize: compact ? 10.5 : 11.5,
-                                  color: c.muted)),
-                          Text('เงย ${s.aimAlt.round()}°',
-                              style: TextStyle(
-                                  fontFamily: fMono,
-                                  fontSize: compact ? 10.5 : 11.5,
-                                  color: c.muted)),
-                        ],
-                      ),
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        padding: EdgeInsets.fromLTRB(14, 26, 14, compact ? 10 : 12),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              c.ink.withOpacity(0),
-                              c.ink.withOpacity(0.8),
-                              c.ink.withOpacity(0.93),
-                            ],
-                            stops: const [0, 0.42, 1],
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(_hit?.name ?? 'ไม่มีวัตถุเด่นตรงนี้',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontFamily: fDisplay,
-                                    fontSize: compact ? 17 : 19,
-                                    fontWeight: FontWeight.w700,
-                                    color: c.fg)),
-                            Text(
-                                _hit != null
-                                    ? '${_hit!.sub} · โชติมาตร ${_hit!.mag.toStringAsFixed(1)}'
-                                        ' · ห่างจากจุดเล็ง ${_hit!.sep.toStringAsFixed(1)}°'
-                                    : 'กวาดมือถือไปรอบ ๆ ช้า ๆ',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontSize: compact ? 11 : 12,
-                                    color: c.muted)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                  ),
+                  if (wide)
+                    Expanded(child: Align(alignment: Alignment.centerRight, child: timeButtons))
+                  else
+                    timeButtons,
+                ],
+              ),
+              Slider(
+                value: s.offsetMinutes.toDouble(),
+                min: -720,
+                max: 720,
+                divisions: 288,
+                onChanged: (v) => s.setOffset(v.round()),
+              ),
+            ],
           ),
         ),
-        if (!s.sensorOn)
-          SkyCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Eyebrow('ปรับเอง'),
-                const SizedBox(height: 6),
-                _slider(context, 'ทิศ (อะซิมุท)',
-                    '${s.aimAz.round()}° ${compassShort(s.aimAz)}',
-                    s.aimAz, 0, 359, (v) => s.setAim(s.aimAlt, v)),
-                _slider(context, 'มุมเงย', '${s.aimAlt.round()}°',
-                    s.aimAlt, 0, 90, (v) => s.setAim(v, s.aimAz)),
-              ],
-            ),
-          ),
         SkyCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('นำทางไปหาเป้าหมาย',
+              Text('เด่นบนฟ้าตอนนี้',
                   style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 4),
-              if (tgt == null)
-                Text(
-                    'ยังไม่ได้เลือกเป้าหมาย — เลือกจากแท็บรายการ หรือแตะดาวบนแผนที่',
-                    style: TextStyle(
-                        fontSize: compact ? 12 : 12.5,
-                        color: c.muted))
-              else ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text('${sep.round()}°',
-                        style: TextStyle(
-                            fontFamily: fDisplay,
-                            fontSize: compact ? 22 : 26,
-                            fontWeight: FontWeight.w700,
-                            color: sep < 4 ? c.up : c.amber)),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(steer, style: TextStyle(fontSize: 14, color: c.fg)),
-                          Text(
-                              found != null && found.alt > 0
-                                  ? 'อยู่ทาง${compassTh(found.az)} '
-                                      'สูง ${refract(found.alt).round()}°'
-                                  : 'เป้าหมายอยู่ใต้ขอบฟ้าตอนนี้',
-                              style: TextStyle(
-                                  fontSize: compact ? 11.5 : 12.5,
-                                  color: c.muted)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  onPressed: () => s.setTarget(null),
-                  child: const Text('ยกเลิกเป้าหมาย'),
-                ),
-              ],
+              ..._highlights(context),
             ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 22, bottom: 10),
+          child: Text(
+            'ดวงอาทิตย์อยู่ที่ ${sc.sunAlt.toStringAsFixed(1)}° '
+            '${sc.sunAlt > 0 ? 'เหนือ' : 'ใต้'}ขอบฟ้า · '
+            '${darknessLabel(sc.sunAlt)} · แตะที่ดาวบนแผนที่เพื่อดูรายละเอียด',
+            style: TextStyle(
+                fontSize: compact ? 10.8 : 11.5,
+                height: 1.6,
+                color: c.dim),
           ),
         ),
       ],
     );
   }
 
-  Widget _slider(BuildContext context, String label, String value, double v,
-      double min, double max, ValueChanged<double> onChanged) {
+  Widget _step(BuildContext context, String label, VoidCallback onTap) {
     final c = SkyColors.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: TextStyle(fontSize: 12, color: c.muted)),
-            Text(value,
-                style: TextStyle(fontSize: 12, fontFamily: fMono, color: c.muted)),
-          ],
+    final compact = compactPhone(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+            horizontal: compact ? 6 : 8, vertical: compact ? 2.5 : 3),
+        decoration: BoxDecoration(
+          border: Border.all(color: c.line),
+          borderRadius: BorderRadius.circular(8),
         ),
-        Slider(
-            value: v.clamp(min, max),
-            min: min,
-            max: max,
-            onChanged: onChanged),
-      ],
+        child: Text(label,
+            style: TextStyle(
+                fontSize: compact ? 10.5 : 11.5,
+                fontFamily: fMono,
+                color: c.muted)),
+      ),
     );
   }
+
+  void _tap(Offset p, double w) {
+    final radius = w / 2 - 22;
+    final u = domeUnproject(p, radius, Offset(w / 2, w / 2), mapRotation(s));
+    if (u.alt < -3) return;
+    Selection? best;
+    var bd = 7.0;
+    for (final b in sc.bodies) {
+      if (b.alt < -1) continue;
+      final d = angSep(u.alt, u.az, b.alt, b.az);
+      if (d < bd) {
+        bd = d;
+        best = Selection('body', b.id);
+      }
+    }
+    for (final sv in sc.stars) {
+      if (sv.alt < 0 || sv.ref.mag > s.magLim) continue;
+      final d = angSep(u.alt, u.az, sv.alt, sv.az) + sv.ref.mag * 0.25;
+      if (d < bd) {
+        bd = d;
+        best = Selection('star', sv.ref.id);
+      }
+    }
+    for (final o in sc.dsos) {
+      if (o.alt < 0) continue;
+      final d = angSep(u.alt, u.az, o.alt, o.az);
+      if (d < bd) {
+        bd = d;
+        best = Selection('dso', o.ref.id);
+      }
+    }
+    if (best != null) onPick(best);
+  }
+
+  List<Widget> _highlights(BuildContext context) {
+    final c = SkyColors.of(context);
+    final rows = <Widget>[];
+    final ranked = <({BodyPosition b, Body meta, double score})>[];
+    for (var i = 0; i < sc.bodies.length; i++) {
+      final b = sc.bodies[i];
+      final meta = bodies[i];
+      if (b.id == 'sun') {
+        if (b.alt > -1) ranked.add((b: b, meta: meta, score: 100));
+        continue;
+      }
+      if (b.alt < 0) continue;
+      if (b.id == 'moon') {
+        ranked.add((b: b, meta: meta, score: 99));
+        continue;
+      }
+      if (b.mag > 6) continue;
+      ranked.add((b: b, meta: meta, score: 50 - b.mag));
+    }
+    ranked.sort((a, b) => b.score.compareTo(a.score));
+    for (final r in ranked) {
+      final extra = r.b.id == 'moon'
+          ? 'สว่าง ${((r.b.illum ?? 0) * 100).round()}% · ${moonPhaseName(r.b)}'
+          : r.b.id == 'sun'
+              ? 'กลางวัน'
+              : 'โชติมาตร ${r.b.mag.toStringAsFixed(1)}';
+      rows.add(ObjectRow(
+        name: r.meta.th,
+        sub: extra,
+        badge: r.b.id == 'moon' ? '☾' : '●',
+        right: '${r.b.altApp.round()}°',
+        sub2: '${compassShort(r.b.az)} ${r.b.az.round()}°',
+        colour: s.nightMode ? const Color(0xFFFF8A6B) : Color(r.meta.color),
+        onTap: () => onPick(Selection('body', r.b.id)),
+      ));
+    }
+    final bright = sc.stars.where((x) => x.alt > 8 && x.ref.mag < 1.6).toList()
+      ..sort((a, b) => a.ref.mag.compareTo(b.ref.mag));
+    for (final sv in bright.take(5)) {
+      final con = conById[sv.ref.con];
+      rows.add(ObjectRow(
+        name: sv.ref.shortTh,
+        sub: '${con != null ? 'กลุ่มดาว${con.th} · ' : ''}'
+            'โชติมาตร ${sv.ref.mag.toStringAsFixed(1)}',
+        badge: '✦',
+        right: '${refract(sv.alt).round()}°',
+        sub2: '${compassShort(sv.az)} ${sv.az.round()}°',
+        colour: s.nightMode ? c.star : Color(sv.ref.tint),
+        onTap: () => onPick(Selection('star', sv.ref.id)),
+      ));
+    }
+    if (rows.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Text('ยังไม่มีวัตถุสว่างเหนือขอบฟ้าในเวลานี้',
+              style: TextStyle(fontSize: 12.5, color: c.muted)),
+        )
+      ];
+    }
+    return rows;
+  }
 }
+
+CrossAxisAlignment crossAxisAlignmentForTablet(bool wide) =>
+    wide ? CrossAxisAlignment.center : CrossAxisAlignment.end;
+

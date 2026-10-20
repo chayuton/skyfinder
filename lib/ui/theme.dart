@@ -36,6 +36,10 @@ const String fBody = 'IBMPlexSansThai';
 const String fMono = 'IBMPlexMono';
 
 bool compactPhone(BuildContext context) => MediaQuery.sizeOf(context).width < 360;
+bool tabletLikeLayout(BuildContext context) => MediaQuery.sizeOf(context).width >= 600;
+bool landscapeLikeLayout(BuildContext context) =>
+    MediaQuery.orientationOf(context) == Orientation.landscape ||
+    MediaQuery.sizeOf(context).width >= 720;
 
 ThemeData skyTheme(Sky c) {
   return ThemeData(
@@ -92,14 +96,15 @@ class SkyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = SkyColors.of(context);
     final compact = compactPhone(context);
+    final tablet = tabletLikeLayout(context);
     return Container(
       width: double.infinity,
-      margin: EdgeInsets.only(top: compact ? 8 : 12),
+      margin: EdgeInsets.only(top: compact ? 8 : (tablet ? 10 : 12)),
       padding: padding,
       decoration: BoxDecoration(
         color: c.panel,
         border: Border.all(color: c.line),
-        borderRadius: BorderRadius.circular(compact ? 12 : 16),
+        borderRadius: BorderRadius.circular(compact ? 12 : (tablet ? 14 : 16)),
       ),
       child: child,
     );
@@ -133,6 +138,23 @@ class Pill extends StatelessWidget {
   }
 }
 
+String _shortToggleLabel(String label) {
+  switch (label) {
+    case 'เส้นกลุ่มดาว':
+      return 'เส้น';
+    case 'ชื่อดาว':
+      return 'ชื่อ';
+    case 'ทางช้างเผือก':
+      return 'ช้างเผือก';
+    case 'เส้นสุริยวิถี':
+      return 'สุริยวิถี';
+    case 'หมุนตามเข็มทิศ':
+      return 'เข็มทิศ';
+    default:
+      return label;
+  }
+}
+
 /// A pill-shaped on/off chip, used for the chart layers.
 class Tog extends StatelessWidget {
   final String label;
@@ -144,7 +166,9 @@ class Tog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final compact = compactPhone(context);
+    final wide = landscapeLikeLayout(context);
     final c = SkyColors.of(context);
+    final displayLabel = (compact || wide) ? _shortToggleLabel(label) : label;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -156,7 +180,7 @@ class Tog extends StatelessWidget {
               color: on ? (hot ? c.amber : const Color(0xFF2E3B5E)) : c.line),
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(label,
+        child: Text(displayLabel,
             style: TextStyle(
                 fontSize: compact ? 11.2 : 12,
                 color: on ? (hot ? c.amber : c.fg) : c.muted)),

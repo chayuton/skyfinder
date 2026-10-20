@@ -59,15 +59,17 @@ class ObjectRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(name,
-                      maxLines: 1,
+                      maxLines: compact ? 2 : 1,
                       overflow: TextOverflow.ellipsis,
+                      softWrap: true,
                       style: TextStyle(
                           fontSize: compact ? 13 : 14,
                           fontWeight: FontWeight.w600,
                           color: c.fg)),
                   Text(sub,
-                      maxLines: 1,
+                      maxLines: compact ? 2 : 1,
                       overflow: TextOverflow.ellipsis,
+                      softWrap: true,
                       style: TextStyle(
                           fontSize: compact ? 10.5 : 11.5,
                           color: c.muted)),
@@ -213,3 +215,4 @@ class _QuadrantPainter extends CustomPainter {
   @override
   bool shouldRepaint(_QuadrantPainter old) => old.alt != alt || old.col != col;
 }
+
