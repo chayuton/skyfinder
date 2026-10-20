@@ -1,0 +1,14 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # The palette is defined once in theme.dart; colours elsewhere are
+    # deliberate one-off values inside painters.
+    prefer_const_constructors: true
+    prefer_final_locals: true
+
+analyzer:
+  errors:
+    # withOpacity is deprecated on new Flutter but still compiles everywhere,
+    # which matters more here than the warning.
+    deprecated_member_use: ignore

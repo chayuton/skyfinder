@@ -1,0 +1,81 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: วิเคราะห์โค้ดและรันเทสต์
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter --version
+      - run: ./tool/prepare_platforms.sh android,web
+      - run: flutter pub get
+      - name: flutter analyze
+        run: flutter analyze --no-fatal-infos
+      - name: flutter test
+        run: flutter test --reporter expanded
+
+  android:
+    name: สร้าง APK
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: ./tool/prepare_platforms.sh android
+      - run: flutter pub get
+      - run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skyfinder-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  web:
+    name: สร้างเว็บ
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: ./tool/prepare_platforms.sh web
+      - run: flutter pub get
+      - run: flutter build web --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skyfinder-web
+          path: build/web
+          if-no-files-found: error
+
+  ios:
+    name: สร้าง iOS (ไม่เซ็นใบรับรอง)
+    needs: analyze
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: ./tool/prepare_platforms.sh ios
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign

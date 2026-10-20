@@ -1,0 +1,23 @@
+name: skyfinder
+description: "ดาวนำทาง — แอปดูดาวภาษาไทย ใช้พิกัดของเครื่องคำนวณตำแหน่งดาวแบบเรียลไทม์"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  geolocator: ^13.0.0        # พิกัด GPS
+  sensors_plus: ^6.0.0       # เข็มทิศและความเร่ง สำหรับโหมดเล็ง
+  shared_preferences: ^2.3.0 # จำสถานที่และการตั้งค่า
+  wakelock_plus: ^1.2.5      # ไม่ให้จอดับระหว่างดูดาว
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
