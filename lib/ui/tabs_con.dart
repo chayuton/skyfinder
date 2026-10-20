@@ -29,6 +29,15 @@ class ConTabView extends StatelessWidget {
       {super.key, required this.s, required this.sc, required this.onOpen});
 
   List<ConRow> _rows() {
+    // Forty figures, each with its own geometry and rise/set, is far too much
+    // to redo every clock tick; a minute of drift is invisible on screen.
+    return memo(
+        'conrows|${minuteKey(sc.jd)}|${s.lat.toStringAsFixed(3)}'
+        '|${s.lon.toStringAsFixed(3)}|${s.height}',
+        _computeRows);
+  }
+
+  List<ConRow> _computeRows() {
     final a = s.alm;
     final out = <ConRow>[];
     for (final con in constellationData) {

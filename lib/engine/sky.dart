@@ -294,6 +294,24 @@ class Almanac {
   }
 }
 
+/// The clock ticks once a second and every tick rebuilds the tree, so anything
+/// that sweeps the whole night has to be remembered between frames. Without
+/// this, the tonight tab recomputes roughly ten thousand planet positions a
+/// second and the app stutters on a phone.
+final Map<String, Object?> _memo = {};
+
+T memo<T>(String key, T Function() compute) {
+  if (_memo.containsKey(key)) return _memo[key] as T;
+  if (_memo.length > 240) _memo.clear();
+  final v = compute();
+  _memo[key] = v;
+  return v;
+}
+
+/// A key that only changes once a minute: positions move far too slowly for
+/// a faster recompute to show on screen.
+String minuteKey(double jd) => (jd * 1440).floor().toString();
+
 Almanac? _almCache;
 
 Almanac almanac(DateTime now, double lat, double lon, double h) {
@@ -322,6 +340,11 @@ Almanac almanac(DateTime now, double lat, double lon, double h) {
 /// faint objects are really within reach.
 List<List<double>> moonDownWindows(
     Almanac a, double lat, double lon, double h) {
+  return memo('moondown|${a.key}', () => _moonDownWindows(a, lat, lon, h));
+}
+
+List<List<double>> _moonDownWindows(
+    Almanac a, double lat, double lon, double h) {
   final win = <List<double>>[];
   final evts = <({double j, bool rise})>[];
   if (a.moonT.rise != null) evts.add((j: a.moonT.rise!, rise: true));
@@ -344,14 +367,18 @@ List<List<double>> moonDownWindows(
 ({double jd, double alt, double az})? bestDuring(
     String id, double? dusk, double? dawn, double lat, double lon, double h) {
   if (dusk == null || dawn == null) return null;
-  ({double jd, double alt, double az})? best;
-  for (var jd = dusk; jd <= dawn; jd += 1 / 48) {
-    final p = bodyPosition(id, jd, lat, lon, h);
-    if (best == null || p.alt > best.alt) {
-      best = (jd: jd, alt: p.alt, az: p.az);
+  final key = 'best|$id|${dusk.toStringAsFixed(5)}|${dawn.toStringAsFixed(5)}'
+      '|${lat.toStringAsFixed(3)}|${lon.toStringAsFixed(3)}|$h';
+  return memo(key, () {
+    ({double jd, double alt, double az})? best;
+    for (var jd = dusk; jd <= dawn; jd += 1 / 48) {
+      final p = bodyPosition(id, jd, lat, lon, h);
+      if (best == null || p.alt > best.alt) {
+        best = (jd: jd, alt: p.alt, az: p.az);
+      }
     }
-  }
-  return (best != null && best.alt > 5) ? best : null;
+    return (best != null && best.alt > 5) ? best : null;
+  });
 }
 
 class ShowerView {
@@ -362,6 +389,14 @@ class ShowerView {
 }
 
 List<ShowerView> activeShowers(DateTime date, double? dusk, double? dawn,
+    double lat, double lon, double jdNow) {
+  final key = 'showers|${date.toIso8601String().substring(0, 10)}'
+      '|${dusk?.toStringAsFixed(5)}|${dawn?.toStringAsFixed(5)}'
+      '|${lat.toStringAsFixed(3)}|${lon.toStringAsFixed(3)}';
+  return memo(key, () => _activeShowers(date, dusk, dawn, lat, lon, jdNow));
+}
+
+List<ShowerView> _activeShowers(DateTime date, double? dusk, double? dawn,
     double lat, double lon, double jdNow) {
   final out = <ShowerView>[];
   for (final s in showerData) {
