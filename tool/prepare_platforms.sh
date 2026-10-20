@@ -54,4 +54,11 @@ open(p, 'w', encoding='utf-8').write(s)
 PY
 fi
 
+# `flutter create` drops in a stock test that instantiates MyApp, a class this
+# project does not have, so analysis fails until it is removed.
+if [ -f test/widget_test.dart ] && grep -q "MyApp" test/widget_test.dart; then
+  echo "==> removing the generated widget_test.dart stub"
+  rm -f test/widget_test.dart
+fi
+
 echo "==> platforms ready"

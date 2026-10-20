@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-import '../data/stars.dart';
 import '../engine/engine.dart';
 import '../engine/sky.dart';
 import '../painters/constellation_painter.dart';

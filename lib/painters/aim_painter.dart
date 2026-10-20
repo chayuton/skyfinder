@@ -62,7 +62,7 @@ class AimPainter extends CustomPainter {
         Offset.zero & size,
         Paint()
           ..shader = ui.Gradient.linear(
-              Offset(0, 0), Offset(0, h), grad, [0.0, 1.0]));
+              const Offset(0, 0), Offset(0, h), grad, const [0.0, 1.0]));
 
     // Ground below the horizon, then the horizon itself.
     final hp = <Offset>[];

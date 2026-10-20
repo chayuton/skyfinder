@@ -18,7 +18,8 @@ class Selection {
   final String id;
   const Selection(this.kind, this.id);
   @override
-  bool operator ==(Object o) => o is Selection && o.kind == kind && o.id == id;
+  bool operator ==(Object other) =>
+      other is Selection && other.kind == kind && other.id == id;
   @override
   int get hashCode => Object.hash(kind, id);
 }
@@ -339,7 +340,8 @@ class AppState extends ChangeNotifier {
 
     final ex = hx / hn, ey = hy / hn, ez = hz / hn;
     final ax = a[0] / an, ay = a[1] / an, az = a[2] / an;
-    final nx = ay * ez - az * ey;
+    // North = up x east, in device coordinates. Only the y and z components
+    // are read below, since the device x axis is never projected.
     final ny = az * ex - ax * ez;
     final nz = ax * ey - ay * ex;
 

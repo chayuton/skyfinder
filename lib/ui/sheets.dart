@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../data/places.dart';
-import '../data/stars.dart';
 import '../engine/engine.dart';
 import '../engine/sky.dart';
 import '../painters/constellation_painter.dart';
