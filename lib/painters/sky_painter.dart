@@ -78,7 +78,17 @@ class SkyDomePainter extends CustomPainter {
   final Scene sc;
   final AppState s;
   final Sky c;
-  SkyDomePainter(this.sc, this.s, this.c);
+
+  /// AppState is mutated in place, so the old painter and the new one hold the
+  /// same object and comparing their fields always says "unchanged". The state
+  /// that matters is flattened into a string at construction time instead;
+  /// without it, tapping a layer toggle does nothing until the clock ticks.
+  final String sig;
+
+  SkyDomePainter(this.sc, this.s, this.c)
+      : sig = '${sc.jd}|${s.lat}|${s.lon}|${s.height}|${s.magLim}|${s.lines}'
+            '|${s.names}|${s.milky}|${s.ecliptic}|${s.faceLock}|${s.heading}'
+            '|${s.selected?.kind}${s.selected?.id}|${s.nightMode}';
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -330,19 +340,7 @@ class SkyDomePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(SkyDomePainter old) =>
-      old.sc.jd != sc.jd ||
-      old.s.lat != s.lat ||
-      old.s.lon != s.lon ||
-      old.s.magLim != s.magLim ||
-      old.s.lines != s.lines ||
-      old.s.names != s.names ||
-      old.s.milky != s.milky ||
-      old.s.ecliptic != s.ecliptic ||
-      old.s.faceLock != s.faceLock ||
-      old.s.heading != s.heading ||
-      old.s.selected != s.selected ||
-      old.s.nightMode != s.nightMode;
+  bool shouldRepaint(SkyDomePainter old) => old.sig != sig;
 }
 
 /// Resolve a selection against the current scene.

@@ -24,7 +24,14 @@ class AimPainter extends CustomPainter {
   final AppState s;
   final Sky c;
   final void Function(NearHit?) onHit;
-  AimPainter(this.sc, this.s, this.c, this.onHit);
+
+  /// Same reason as the dome painter: AppState is one mutable object, so the
+  /// comparison has to be against values captured when this painter was built.
+  final String sig;
+
+  AimPainter(this.sc, this.s, this.c, this.onHit)
+      : sig = '${sc.jd}|${s.aimAlt}|${s.aimAz}|${s.magLim}|${s.lines}'
+            '|${s.target?.kind}${s.target?.id}|${s.nightMode}';
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -255,12 +262,5 @@ class AimPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(AimPainter old) =>
-      old.sc.jd != sc.jd ||
-      old.s.aimAlt != s.aimAlt ||
-      old.s.aimAz != s.aimAz ||
-      old.s.magLim != s.magLim ||
-      old.s.lines != s.lines ||
-      old.s.target != s.target ||
-      old.s.nightMode != s.nightMode;
+  bool shouldRepaint(AimPainter old) => old.sig != sig;
 }
