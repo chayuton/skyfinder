@@ -139,48 +139,61 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _header(BuildContext context, AppState s, Sky c) {
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < 360;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      padding: EdgeInsets.fromLTRB(compact ? 12 : 16, 10, compact ? 12 : 16, 8),
       color: c.ink,
       child: Row(
         children: [
           Text('ดาวนำทาง',
               style: TextStyle(
                   fontFamily: fDisplay,
-                  fontSize: 17,
+                  fontSize: compact ? 16 : 17,
                   fontWeight: FontWeight.w700,
                   color: c.fg)),
           const Spacer(),
           Flexible(
-            child: GestureDetector(
-              onTap: _openPlace,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-                decoration: BoxDecoration(
-                  color: c.panel,
-                  border: Border.all(color: c.line),
-                  borderRadius: BorderRadius.circular(999),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: compact ? 120 : 170),
+              child: GestureDetector(
+                onTap: _openPlace,
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: compact ? 9 : 11, vertical: compact ? 4 : 5),
+                  decoration: BoxDecoration(
+                    color: c.panel,
+                    border: Border.all(color: c.line),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text('📍 ${s.place}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: compact ? 11.5 : 12.5,
+                          color: c.fg)),
                 ),
-                child: Text('📍 ${s.place}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12.5, color: c.fg)),
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: compact ? 8 : 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(fmtClock(s.now),
                   style: TextStyle(
-                      fontFamily: fMono, fontSize: 13, color: c.fg)),
+                      fontFamily: fMono,
+                      fontSize: compact ? 12 : 13,
+                      color: c.fg)),
               Text(
                   s.offsetMinutes == 0
                       ? 'ตอนนี้'
                       : '${s.offsetMinutes > 0 ? '+' : ''}${s.offsetMinutes} น.',
                   style: TextStyle(
-                      fontFamily: fMono, fontSize: 10, color: c.muted)),
+                      fontFamily: fMono,
+                      fontSize: compact ? 9.2 : 10,
+                      color: c.muted)),
             ],
           ),
         ],
@@ -189,7 +202,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _tabBar(BuildContext context, AppState s, Sky c) {
-    const tabs = [
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < 360;
+    final tabs = [
       (SkyTab.sky, 'แผนที่ฟ้า', Icons.public),
       (SkyTab.aim, 'เล็ง', Icons.my_location),
       (SkyTab.con, 'กลุ่มดาว', Icons.auto_graph),
@@ -197,6 +212,7 @@ class _HomePageState extends State<HomePage> {
       (SkyTab.night, 'คืนนี้', Icons.nightlight_round),
       (SkyTab.settings, 'ตั้งค่า', Icons.settings),
     ];
+
     return Container(
       decoration: BoxDecoration(
         color: c.panel,
@@ -210,18 +226,20 @@ class _HomePageState extends State<HomePage> {
               child: InkWell(
                 onTap: () => s.setTab(t.$1),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  padding: EdgeInsets.symmetric(vertical: compact ? 7.5 : 9),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(t.$3,
-                          size: 20, color: s.tab == t.$1 ? c.amber : c.muted),
-                      const SizedBox(height: 3),
+                          size: compact ? 18 : 20,
+                          color: s.tab == t.$1 ? c.amber : c.muted),
+                      SizedBox(height: compact ? 2 : 3),
                       Text(t.$2,
                           maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                               fontFamily: fDisplay,
-                              fontSize: 9.5,
+                              fontSize: compact ? 8.4 : 9.5,
                               color: s.tab == t.$1 ? c.amber : c.muted)),
                     ],
                   ),
