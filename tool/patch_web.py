@@ -36,28 +36,40 @@ EXTRA = SENTINEL + '''
       display: grid;
       place-items: center;
       background: radial-gradient(circle at top, #0b1530 0%, #070A14 48%, #02060d 100%);
-      transition: opacity 220ms ease, visibility 220ms ease;
+      transition: opacity 260ms ease, visibility 260ms ease;
+      overflow: hidden;
     }
     #skyfinder-loader.hidden {
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
     }
+    #skyfinder-loader canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: transparent;
+    }
     .skyfinder-loader-shell {
+      position: relative;
+      z-index: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 10px;
+      gap: 14px;
       color: #dfe7ff;
       text-align: center;
       user-select: none;
+      transform: translateY(-6px);
     }
     .skyfinder-loader-orbit {
-      width: 72px;
-      height: 72px;
+      width: 86px;
+      height: 86px;
       border-radius: 50%;
-      border: 1px solid rgba(255,255,255,0.12);
-      box-shadow: inset 0 0 12px rgba(152, 188, 255, 0.22), 0 0 32px rgba(111, 143, 255, 0.18);
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: inset 0 0 18px rgba(152, 188, 255, 0.22), 0 0 34px rgba(111, 143, 255, 0.18);
       position: relative;
       animation: skyfinder-spin 1.6s linear infinite;
     }
@@ -67,19 +79,19 @@ EXTRA = SENTINEL + '''
       position: absolute;
       border-radius: 50%;
       background: #f8d36f;
-      box-shadow: 0 0 24px rgba(248, 211, 111, 0.9);
+      box-shadow: 0 0 26px rgba(248, 211, 111, 0.9);
     }
     .skyfinder-loader-orbit::before {
-      width: 10px;
-      height: 10px;
+      width: 12px;
+      height: 12px;
       top: 8px;
-      left: 16px;
+      left: 18px;
     }
     .skyfinder-loader-orbit::after {
-      width: 8px;
-      height: 8px;
-      right: 14px;
-      bottom: 12px;
+      width: 10px;
+      height: 10px;
+      right: 16px;
+      bottom: 14px;
     }
     @keyframes skyfinder-spin {
       0% { transform: rotate(0deg); }
@@ -87,47 +99,183 @@ EXTRA = SENTINEL + '''
     }
     .skyfinder-loader-title {
       font-size: 15px;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       font-weight: 700;
       color: #f2f6ff;
     }
     .skyfinder-loader-sub {
       font-size: 11px;
-      color: rgba(223, 231, 255, 0.74);
-      letter-spacing: 0.06em;
+      color: rgba(223, 231, 255, 0.76);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .skyfinder-loader-progress-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      min-width: min(260px, 72vw);
+    }
+    .skyfinder-loader-progress-bar {
+      width: min(240px, 70vw);
+      height: 6px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.08);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+    }
+    .skyfinder-loader-progress-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #90b8ff 0%, #7ec7ff 30%, #f0d98c 100%);
+      box-shadow: 0 0 18px rgba(126, 199, 255, 0.8);
+      transition: width 180ms ease-out;
+    }
+    .skyfinder-loader-progress-text {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: rgba(255,255,255,0.9);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    @media (max-width: 480px) {
+      .skyfinder-loader-shell { gap: 12px; }
+      .skyfinder-loader-orbit {
+        width: 72px;
+        height: 72px;
+      }
+      .skyfinder-loader-title {
+        font-size: 13px;
+      }
+      .skyfinder-loader-sub {
+        font-size: 10px;
+      }
     }
   </style>
   <div id="skyfinder-loader" aria-live="polite" aria-busy="true">
+    <canvas id="skyfinder-loader-canvas"></canvas>
     <div class="skyfinder-loader-shell">
       <div class="skyfinder-loader-orbit"></div>
       <div class="skyfinder-loader-title">ดาวนำทาง</div>
       <div class="skyfinder-loader-sub">กำลังโหลดท้องฟ้า…</div>
+      <div class="skyfinder-loader-progress-wrap">
+        <div class="skyfinder-loader-progress-bar" aria-hidden="true">
+          <div id="skyfinder-loader-progress-fill" class="skyfinder-loader-progress-fill"></div>
+        </div>
+        <div id="skyfinder-loader-progress-text" class="skyfinder-loader-progress-text">8%</div>
+      </div>
     </div>
   </div>
   <script>
     (() => {
       const loader = document.getElementById('skyfinder-loader');
-      if (!loader) return;
+      const fill = document.getElementById('skyfinder-loader-progress-fill');
+      const text = document.getElementById('skyfinder-loader-progress-text');
+      const canvas = document.getElementById('skyfinder-loader-canvas');
+      if (!loader || !fill || !text || !canvas) return;
+
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      const slowNetwork = connection && ['slow-2g', '2g', '3g'].includes(connection.effectiveType);
+      const longDelay = slowNetwork || window.innerWidth < 420;
+      const startDelay = longDelay ? 1600 : 600;
+      const maxDelay = longDelay ? 11000 : 7000;
 
       const hideLoader = () => {
         if (loader.classList.contains('hidden')) return;
         loader.classList.add('hidden');
-        window.setTimeout(() => loader.remove(), 260);
+        window.setTimeout(() => loader.remove(), 280);
       };
 
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const drawStars = () => {
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const resize = () => {
+          const ratio = window.devicePixelRatio || 1;
+          canvas.width = Math.floor(window.innerWidth * ratio);
+          canvas.height = Math.floor(window.innerHeight * ratio);
+          canvas.style.width = window.innerWidth + 'px';
+          canvas.style.height = window.innerHeight + 'px';
+          ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        };
+
+        const stars = Array.from({ length: Math.min(120, Math.max(52, Math.round(window.innerWidth / 12))) }, () => ({
+          x: Math.random() * window.innerWidth,
+          y: Math.random() * window.innerHeight,
+          r: Math.random() * 2.1 + 0.5,
+          a: Math.random() * 0.9 + 0.15,
+          drift: Math.random() * 0.6 + 0.2,
+        }));
+
+        const render = () => {
+          ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+          for (const star of stars) {
+            const alpha = star.a + Math.sin((performance.now() * 0.0013 + star.x) * star.drift) * 0.35;
+            ctx.beginPath();
+            ctx.fillStyle = 'rgba(255,255,255,' + Math.min(1, Math.max(0.15, alpha)) + ')';
+            ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+            ctx.fill();
+            if (Math.random() < 0.009) {
+              ctx.beginPath();
+              ctx.strokeStyle = 'rgba(162, 194, 255, 0.28)';
+              ctx.moveTo(star.x, star.y);
+              ctx.lineTo(star.x + 18, star.y - 12);
+              ctx.stroke();
+            }
+          }
+          requestAnimationFrame(render);
+        };
+
+        resize();
+        window.addEventListener('resize', resize, { passive: true });
+        render();
+      };
+
+      if (!prefersReducedMotion) {
+        drawStars();
+      }
+
+      const startAt = performance.now();
+      const tick = (now) => {
+        const elapsed = now - startAt;
+        const ratio = Math.min(1, elapsed / maxDelay);
+        const percent = Math.min(98, Math.max(8, Math.round(8 + ratio * 90)));
+        fill.style.width = percent + '%';
+        text.textContent = percent + '%';
+
+        if (ratio < 1) {
+          requestAnimationFrame(tick);
+        }
+      };
+
+      window.setTimeout(() => requestAnimationFrame(tick), startDelay);
+
+      if (prefersReducedMotion) {
+        fill.style.width = '100%';
+        text.textContent = '100%';
         hideLoader();
         return;
       }
 
-      if (document.readyState === 'complete') {
-        window.setTimeout(hideLoader, 220);
-      } else {
-        window.addEventListener('load', () => window.setTimeout(hideLoader, 220), { once: true });
-      }
+      window.addEventListener('flutter-first-frame', () => {
+        fill.style.width = '100%';
+        text.textContent = '100%';
+        window.setTimeout(hideLoader, longDelay ? 1800 : 900);
+      }, { once: true });
 
-      window.addEventListener('flutter-first-frame', hideLoader, { once: true });
+      window.addEventListener('load', () => {
+        window.setTimeout(() => {
+          if (!loader.classList.contains('hidden')) {
+            fill.style.width = '100%';
+            text.textContent = '100%';
+            window.setTimeout(hideLoader, longDelay ? 1500 : 700);
+          }
+        }, longDelay ? 3500 : 1800);
+      }, { once: true });
     })();
   </script>
 '''
