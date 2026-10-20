@@ -6,6 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Every step tees its output to a log, and a failing job posts the tail of that
+# log as a commit comment. The raw Actions log lives on storage this project's
+# tooling cannot reach, so without this a red build says nothing about why.
+permissions:
+  contents: write
+
 jobs:
   analyze:
     name: วิเคราะห์โค้ดและรันเทสต์
@@ -16,13 +22,28 @@ jobs:
         with:
           channel: stable
           cache: true
-      - run: flutter --version
-      - run: ./tool/prepare_platforms.sh android,web
-      - run: flutter pub get
+      - run: flutter --version 2>&1 | tee -a /tmp/ci.log
+      - name: prepare platforms
+        run: |
+          set -o pipefail
+          ./tool/prepare_platforms.sh android,web 2>&1 | tee -a /tmp/ci.log
+      - name: pub get
+        run: |
+          set -o pipefail
+          flutter pub get 2>&1 | tee -a /tmp/ci.log
       - name: flutter analyze
-        run: flutter analyze --no-fatal-infos
+        run: |
+          set -o pipefail
+          flutter analyze --no-fatal-infos 2>&1 | tee -a /tmp/ci.log
       - name: flutter test
-        run: flutter test --reporter expanded
+        run: |
+          set -o pipefail
+          flutter test --reporter expanded 2>&1 | tee -a /tmp/ci.log
+      - name: report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash tool/report_failure.sh "${{ github.job }}"
 
   android:
     name: สร้าง APK
@@ -38,14 +59,22 @@ jobs:
         with:
           channel: stable
           cache: true
-      - run: ./tool/prepare_platforms.sh android
-      - run: flutter pub get
-      - run: flutter build apk --release
+      - name: build apk
+        run: |
+          set -o pipefail
+          ./tool/prepare_platforms.sh android 2>&1 | tee -a /tmp/ci.log
+          flutter pub get 2>&1 | tee -a /tmp/ci.log
+          flutter build apk --release 2>&1 | tee -a /tmp/ci.log
       - uses: actions/upload-artifact@v4
         with:
           name: skyfinder-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+      - name: report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash tool/report_failure.sh "${{ github.job }}"
 
   web:
     name: สร้างเว็บ
@@ -57,14 +86,22 @@ jobs:
         with:
           channel: stable
           cache: true
-      - run: ./tool/prepare_platforms.sh web
-      - run: flutter pub get
-      - run: flutter build web --release
+      - name: build web
+        run: |
+          set -o pipefail
+          ./tool/prepare_platforms.sh web 2>&1 | tee -a /tmp/ci.log
+          flutter pub get 2>&1 | tee -a /tmp/ci.log
+          flutter build web --release 2>&1 | tee -a /tmp/ci.log
       - uses: actions/upload-artifact@v4
         with:
           name: skyfinder-web
           path: build/web
           if-no-files-found: error
+      - name: report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash tool/report_failure.sh "${{ github.job }}"
 
   ios:
     name: สร้าง iOS (ไม่เซ็นใบรับรอง)
@@ -76,6 +113,14 @@ jobs:
         with:
           channel: stable
           cache: true
-      - run: ./tool/prepare_platforms.sh ios
-      - run: flutter pub get
-      - run: flutter build ios --release --no-codesign
+      - name: build ios
+        run: |
+          set -o pipefail
+          ./tool/prepare_platforms.sh ios 2>&1 | tee -a /tmp/ci.log
+          flutter pub get 2>&1 | tee -a /tmp/ci.log
+          flutter build ios --release --no-codesign 2>&1 | tee -a /tmp/ci.log
+      - name: report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash tool/report_failure.sh "${{ github.job }}"
