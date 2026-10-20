@@ -6,7 +6,6 @@
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
-  "orientation": "portrait-primary",
   "background_color": "#070A14",
   "theme_color": "#070A14",
   "categories": ["education", "navigation", "utilities"],

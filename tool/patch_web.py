@@ -17,6 +17,18 @@ import sys
 SENTINEL = '<!-- skyfinder-web-overlay -->'
 
 EXTRA = SENTINEL + '''
+  <!-- Flutter's web template ships no viewport tag at all. Without one a phone
+       browser lays the page out at its fallback desktop width (about 980px) and
+       scales the result down, so every width the app reads from MediaQuery is
+       that fallback rather than the device: compactPhone never matches,
+       tabletLikeLayout always does, and the max-width rule below never fires.
+       The cover value for viewport-fit is deliberately left off. Flutter web
+       does not fill MediaQuery.padding in from env(safe-area-inset-*), so with
+       it the UI would sit under a notch or home indicator with no inset
+       available to move it back; left off, iOS keeps the standalone web view
+       inside the safe area by itself. Zoom is pinned because the sky map reads
+       its own drag and pinch gestures, which browser page zoom would take. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#070A14">
   <meta name="color-scheme" content="dark">
   <meta name="mobile-web-app-capable" content="yes">
@@ -27,7 +39,8 @@ EXTRA = SENTINEL + '''
   <!-- The app paints its own night sky, so the page starts dark instead of
        flashing white between first paint and the engine starting. -->
   <style>
-    html, body { margin: 0; padding: 0; background: #070A14; height: 100%; }
+    html, body { margin: 0; padding: 0; background: #070A14; height: 100%;
+                   -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     body { overscroll-behavior-y: none; }
     #skyfinder-loader {
       position: fixed;
@@ -316,6 +329,7 @@ SUPERSEDED = [
     r'[ \t]*<meta name="mobile-web-app-capable"[^>]*>\n?',
     r'[ \t]*<meta name="apple-mobile-web-app-status-bar-style"[^>]*>\n?',
     r'[ \t]*<meta name="theme-color"[^>]*>\n?',
+    r'[ \t]*<meta name="viewport"[^>]*>\n?',
     r'[ \t]*<link rel="apple-touch-icon"[^>]*>\n?',
 ]
 

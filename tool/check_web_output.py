@@ -36,6 +36,7 @@ def main(out_dir: str) -> int:
     if index is not None:
         html = index.read_text(encoding='utf-8')
         for needle, why in [
+            ('width=device-width', 'a mobile viewport, without which every MediaQuery width is the browser fallback'),
             ('<title>ดาวนำทาง</title>', 'Thai title'),
             ('apple-mobile-web-app-title', 'iOS home-screen metadata'),
             ('theme-color', 'theme colour'),
