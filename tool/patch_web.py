@@ -29,7 +29,107 @@ EXTRA = SENTINEL + '''
   <style>
     html, body { margin: 0; padding: 0; background: #070A14; height: 100%; }
     body { overscroll-behavior-y: none; }
+    #skyfinder-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, #0b1530 0%, #070A14 48%, #02060d 100%);
+      transition: opacity 220ms ease, visibility 220ms ease;
+    }
+    #skyfinder-loader.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .skyfinder-loader-shell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      color: #dfe7ff;
+      text-align: center;
+      user-select: none;
+    }
+    .skyfinder-loader-orbit {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: inset 0 0 12px rgba(152, 188, 255, 0.22), 0 0 32px rgba(111, 143, 255, 0.18);
+      position: relative;
+      animation: skyfinder-spin 1.6s linear infinite;
+    }
+    .skyfinder-loader-orbit::before,
+    .skyfinder-loader-orbit::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      background: #f8d36f;
+      box-shadow: 0 0 24px rgba(248, 211, 111, 0.9);
+    }
+    .skyfinder-loader-orbit::before {
+      width: 10px;
+      height: 10px;
+      top: 8px;
+      left: 16px;
+    }
+    .skyfinder-loader-orbit::after {
+      width: 8px;
+      height: 8px;
+      right: 14px;
+      bottom: 12px;
+    }
+    @keyframes skyfinder-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .skyfinder-loader-title {
+      font-size: 15px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #f2f6ff;
+    }
+    .skyfinder-loader-sub {
+      font-size: 11px;
+      color: rgba(223, 231, 255, 0.74);
+      letter-spacing: 0.06em;
+    }
   </style>
+  <div id="skyfinder-loader" aria-live="polite" aria-busy="true">
+    <div class="skyfinder-loader-shell">
+      <div class="skyfinder-loader-orbit"></div>
+      <div class="skyfinder-loader-title">ดาวนำทาง</div>
+      <div class="skyfinder-loader-sub">กำลังโหลดท้องฟ้า…</div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const loader = document.getElementById('skyfinder-loader');
+      if (!loader) return;
+
+      const hideLoader = () => {
+        if (loader.classList.contains('hidden')) return;
+        loader.classList.add('hidden');
+        window.setTimeout(() => loader.remove(), 260);
+      };
+
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        hideLoader();
+        return;
+      }
+
+      if (document.readyState === 'complete') {
+        window.setTimeout(hideLoader, 220);
+      } else {
+        window.addEventListener('load', () => window.setTimeout(hideLoader, 220), { once: true });
+      }
+
+      window.addEventListener('flutter-first-frame', hideLoader, { once: true });
+    })();
+  </script>
 '''
 
 # Tags Flutter's template may already carry; ours replace them rather than
