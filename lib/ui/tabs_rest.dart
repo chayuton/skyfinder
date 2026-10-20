@@ -213,7 +213,7 @@ class NightTabView extends StatelessWidget {
                         style: TextStyle(
                             fontWeight: FontWeight.w600, color: c.fg, fontSize: 12.5)),
                     if (windows.isEmpty)
-                      const Text('คืนนี้ดวงจันทร์ส่องตลอดช่วงฟ้ามืด — เหมาะกับการดูดวงจันทร์ ดาวเคราะห์ และดาวสว่างมากกว่า'),
+                      const Text('คืนนี้ดวงจันทร์ส่องตลอดช่วงฟ้ามืด — เหมาะกับการดูดวงจันทร์ ดาวเคราะห์ และดาวสว่างมากกว่า')
                     else
                       for (final w in windows)
                         Text('${fmtTime(w[0])} – ${fmtTime(w[1])} '
