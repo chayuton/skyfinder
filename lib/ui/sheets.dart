@@ -11,6 +11,7 @@ import 'widgets.dart';
 
 Future<void> showSkySheet(BuildContext context, Sky colors, Widget child) {
   final compact = compactPhone(context);
+  final landscape = landscapeLikeLayout(context);
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -22,9 +23,9 @@ Future<void> showSkySheet(BuildContext context, Sky colors, Widget child) {
     builder: (ctx) => SkyColors(
       colors: colors,
       child: DraggableScrollableSheet(
-        initialChildSize: compact ? 0.82 : 0.72,
+        initialChildSize: compact ? 0.82 : (landscape ? 0.8 : 0.72),
         minChildSize: compact ? 0.46 : 0.4,
-        maxChildSize: compact ? 0.96 : 0.94,
+        maxChildSize: compact ? 0.96 : (landscape ? 0.9 : 0.94),
         expand: false,
         builder: (_, controller) => Column(
           children: [
@@ -324,4 +325,290 @@ class _LocationSheetState extends State<LocationSheet> {
 
   Widget _sep(Sky c) => Container(
       height: 1, color: c.line, margin: const EdgeInsets.symmetric(vertical: 14));
+}
+
+
+// ------------------------------------------------------------ object detail
+
+class ObjectSheet extends StatelessWidget {
+  final AppState s;
+  final Scene sc;
+  final Selection sel;
+  const ObjectSheet(
+      {super.key, required this.s, required this.sc, required this.sel});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SkyColors.of(context);
+    final o = findInScene(sel, sc, s);
+    if (o == null) return const SizedBox.shrink();
+    final a = s.alm;
+
+    String name, sub;
+    double mag;
+    RiseSet? rs;
+    final extra = <(String, String)>[];
+
+    if (sel.kind == 'body') {
+      final b = o.body!;
+      final meta = bodies.firstWhere((x) => x.id == b.id);
+      name = meta.th;
+      sub = meta.en + (meta.kind == 'planet' ? ' · ดาวเคราะห์' : '');
+      mag = b.mag;
+      rs = b.id == 'moon'
+          ? a.moonT
+          : b.id == 'sun'
+              ? RiseSet(rise: a.ev.rise, set: a.ev.set, transit: a.ev.transit,
+                  maxAlt: a.ev.maxAlt)
+              : a.planets[b.id];
+      if (b.id == 'moon') {
+        extra.addAll([
+          ('ข้างขึ้นข้างแรม', moonPhaseName(b)),
+          ('ส่วนสว่าง', '${((b.illum ?? 0) * 100).round()}%'),
+          ('อายุดวงจันทร์', '${(b.age ?? 0).toStringAsFixed(1)} วัน'),
+          ('ระยะทาง', '${(b.distKm ?? 0).round()} กม.'),
+          ('ขนาดปรากฏ', '${(b.angSize ?? 0).toStringAsFixed(1)}′'),
+        ]);
+      } else if (meta.kind == 'planet') {
+        extra.addAll([
+          ('ระยะจากโลก', '${(b.distAu ?? 0).toStringAsFixed(3)} AU'),
+          ('แสงเดินทางถึงโลก', '${((b.distAu ?? 0) * 8.317).toStringAsFixed(1)} นาที'),
+          ('ระยะจากดวงอาทิตย์', '${(b.sunDistAu ?? 0).toStringAsFixed(3)} AU'),
+          ('มุมห่างดวงอาทิตย์',
+              '${(b.elong ?? 0).toStringAsFixed(1)}° ${(b.eastOfSun ?? true) ? 'ตะวันออก' : 'ตะวันตก'}'),
+          ('ส่วนสว่าง', '${((b.phase ?? 0) * 100).round()}%'),
+        ]);
+      } else if (b.id == 'sun') {
+        extra.addAll([
+          ('ระยะจากโลก', '${(b.distAu ?? 0).toStringAsFixed(4)} AU'),
+          ('แสงเดินทางถึงโลก', '${((b.distAu ?? 0) * 8.317).toStringAsFixed(1)} นาที'),
+        ]);
+      }
+    } else if (sel.kind == 'star') {
+      final st = o.star!;
+      final con = conById[st.con];
+      name = st.th;
+      sub = '${st.en} · ${st.bayer} · กลุ่มดาว${con?.th ?? '—'}';
+      mag = st.mag;
+      rs = starRiseSet(st.ra, st.dec, a.jd0, s.lat, s.lon, s.height);
+    } else {
+      final d = o.dso!;
+      name = d.th;
+      sub = '${d.en} · ${d.type}';
+      mag = d.mag;
+      rs = starRiseSet(d.ra, d.dec, a.jd0, s.lat, s.lon, s.height);
+    }
+
+    final vis = visibility(mag, o.alt, sc.sunAlt);
+    final altA = refract(o.alt);
+    final transitAlt = (rs?.transit != null && sel.kind != 'body')
+        ? eqToAltAz(
+                sel.kind == 'star' ? o.star!.ra : o.dso!.ra,
+                sel.kind == 'star' ? o.star!.dec : o.dso!.dec,
+                s.lat, s.lon, rs!.transit!)
+            .alt
+        : rs?.maxAlt;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Eyebrow(sel.kind == 'body'
+                      ? 'ระบบสุริยะ'
+                      : sel.kind == 'star'
+                          ? 'ดาวฤกษ์'
+                          : 'วัตถุห้วงลึก'),
+                  Text(name,
+                      style: TextStyle(
+                          fontFamily: fDisplay,
+                          fontSize: 21,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
+                          color: c.fg)),
+                  Text(sub, style: TextStyle(fontSize: 12.5, color: c.muted)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Padding(
+                padding: const EdgeInsets.only(top: 18),
+                child: Pill(vis.text, vis.kind)),
+          ],
+        ),
+        AimDial(az: o.az, alt: altA, up: o.alt > 0),
+        Hint(
+          child: Text(o.alt > 0
+              ? 'หันหน้าไปทาง${compassTh(o.az)} (${o.az.round()}°) '
+                  'แล้วเงยหน้าขึ้น ${altA.round()}°'
+                  '${altA > 75 ? ' — เกือบตรงศีรษะ' : altA < 15 ? ' — อยู่เตี้ยติดขอบฟ้า ต้องมองข้ามสิ่งกีดขวาง' : ''}'
+              : 'ตอนนี้อยู่ใต้ขอบฟ้า มองไม่เห็นจากที่นี่'),
+        ),
+        Kv([
+          ('มุมเงย', '${altA.toStringAsFixed(1)}°'),
+          ('อะซิมุท', '${o.az.toStringAsFixed(1)}° ${compassShort(o.az)}'),
+          ('โชติมาตร', mag.toStringAsFixed(2)),
+          ...extra,
+          ('ขึ้น',
+              rs == null
+                  ? '—'
+                  : rs.circumpolar
+                      ? 'ไม่ตกลับขอบฟ้า'
+                      : rs.neverUp
+                          ? 'ไม่ขึ้นที่ละติจูดนี้'
+                          : fmtTime(rs.rise)),
+          ('ผ่านเมริเดียน',
+              '${fmtTime(rs?.transit)}'
+              '${transitAlt != null && transitAlt > -90 ? ' · ${transitAlt.round()}°' : ''}'),
+          ('ตก', rs != null && rs.circumpolar ? '—' : fmtTime(rs?.set)),
+        ]),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            FilledButton(
+              onPressed: () {
+                s.setTarget(sel);
+                s.setTab(SkyTab.aim);
+                Navigator.of(context).pop();
+              },
+              child: const Text('นำทางไปหาดวงนี้'),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('ปิด'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ------------------------------------------------------ constellation detail
+
+class ConstellationSheet extends StatelessWidget {
+  final AppState s;
+  final Scene sc;
+  final String conId;
+  final void Function(Selection) onPick;
+  const ConstellationSheet(
+      {super.key,
+      required this.s,
+      required this.sc,
+      required this.conId,
+      required this.onPick});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SkyColors.of(context);
+    final con = conById[conId];
+    if (con == null) return const SizedBox.shrink();
+    final geo = conGeometry(con, sc, s.lat, s.lon);
+    if (geo == null) return const SizedBox.shrink();
+    final a = s.alm;
+    final rd = altAzToEq(geo.altC, geo.azC, s.lat, s.lon, sc.jd);
+    final t = starRiseSet(rd.ra, rd.dec, a.jd0, s.lat, s.lon, s.height);
+    final bright = darkness(sc.sunAlt) < 0.25;
+    final members = geo.members.toList()
+      ..sort((x, y) => x.star.mag.compareTo(y.star.mag));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Eyebrow('กลุ่มดาว'),
+        Text('กลุ่มดาว${con.th}',
+            style: TextStyle(
+                fontFamily: fDisplay,
+                fontSize: 21,
+                fontWeight: FontWeight.w700,
+                color: c.fg)),
+        Text('${con.en} · ${geo.members.length} ดวงในผัง · '
+            'สว่างสุดโชติมาตร ${geo.bright.star.mag.toStringAsFixed(1)}',
+            style: TextStyle(fontSize: 12.5, color: c.muted)),
+        const SizedBox(height: 10),
+        LayoutBuilder(
+          builder: (_, box) => Container(
+            width: box.maxWidth,
+            height: box.maxWidth * 3 / 4,
+            decoration: BoxDecoration(
+              color: c.panel2,
+              border: Border.all(color: c.line),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: CustomPaint(
+                painter: ConstellationPainter(con, geo, c, s.nightMode, big: true)),
+          ),
+        ),
+        Hint(child: Text(con.note)),
+        Hint(
+          child: Text(geo.altC > 0
+              ? 'หันหน้าไปทาง${compassTh(geo.azC)} แล้วเงยหน้าขึ้น '
+                  '${geo.altC.round()}° รูปที่เห็นจะเอียงตามภาพนี้พอดี'
+                  '${bright ? ' — แต่ตอนนี้ฟ้ายังสว่างเกินกว่าจะมองเห็น' : ''}'
+              : 'ตอนนี้อยู่ใต้ขอบฟ้า รอถึง ${fmtTime(t.rise)} จึงจะโผล่ขึ้นมาทางขอบฟ้า'),
+        ),
+        Kv([
+          ('ดาวสว่างที่สุด',
+              '${geo.bright.star.shortTh} (${geo.bright.star.mag.toStringAsFixed(2)})'),
+          ('กึ่งกลางกลุ่ม',
+              geo.altC > 0
+                  ? '${geo.altC.round()}° ${compassShort(geo.azC)}'
+                  : 'ใต้ขอบฟ้า'),
+          ('ขึ้น',
+              t.circumpolar
+                  ? 'ไม่ตกลับขอบฟ้า'
+                  : t.neverUp
+                      ? 'ไม่ขึ้นที่นี่'
+                      : fmtTime(t.rise)),
+          ('สูงสุด', fmtTime(t.transit)),
+          ('ตก', t.circumpolar ? '—' : fmtTime(t.set)),
+        ]),
+        Container(
+            height: 1,
+            color: c.line,
+            margin: const EdgeInsets.symmetric(vertical: 14)),
+        const Eyebrow('ดาวในกลุ่ม'),
+        for (final m in members.take(12))
+          ObjectRow(
+            name: m.star.shortTh,
+            sub: '${m.star.bayer} · ${m.star.en}',
+            badge: '✦',
+            right: m.alt > -1 ? '${refract(m.alt).round()}°' : 'ใต้ฟ้า',
+            sub2: m.alt > -1
+                ? '${compassShort(m.az)} · ${m.star.mag.toStringAsFixed(1)}'
+                : 'โชติมาตร ${m.star.mag.toStringAsFixed(1)}',
+            colour: s.nightMode ? c.star : Color(m.star.tint),
+            belowHorizon: m.alt <= -1,
+            onTap: () {
+              Navigator.of(context).pop();
+              onPick(Selection('star', m.star.id));
+            },
+          ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            FilledButton(
+              onPressed: () {
+                s.setTarget(Selection('star', geo.bright.star.id));
+                s.setTab(SkyTab.aim);
+                Navigator.of(context).pop();
+              },
+              child: const Text('นำทางไปหากลุ่มนี้'),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('ปิด'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
