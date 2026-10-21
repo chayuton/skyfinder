@@ -246,8 +246,8 @@ BODY_EXTRA = '''
         <div id="skyfinder-loader-progress-text" class="skyfinder-loader-progress-text">8%</div>
       </div>
       <div id="skyfinder-loader-error" hidden>
-        <div class="skyfinder-err-title">เปิดแอปไม่สำเร็จ</div>
-        <div class="skyfinder-err-hint">เครื่องนี้โหลดตัวเรนเดอร์กราฟิกของแอปไม่ขึ้น ลองล้างแคชแล้วเปิดใหม่ก่อน ถ้ายังไม่หาย กดคัดลอกรายละเอียดด้านล่างส่งให้ผู้พัฒนาได้เลย</div>
+        <div id="skyfinder-err-title" class="skyfinder-err-title">เปิดแอปไม่สำเร็จ</div>
+        <div id="skyfinder-err-hint" class="skyfinder-err-hint">เครื่องนี้โหลดตัวเรนเดอร์กราฟิกของแอปไม่ขึ้น ลองล้างแคชแล้วเปิดใหม่ก่อน ถ้ายังไม่หาย กดคัดลอกรายละเอียดด้านล่างส่งให้ผู้พัฒนาได้เลย</div>
         <pre id="skyfinder-loader-detail"></pre>
         <div class="skyfinder-err-row">
           <button type="button" id="skyfinder-err-reset" class="skyfinder-err-btn primary">ล้างแคชแล้วลองใหม่</button>
@@ -447,6 +447,24 @@ BODY_EXTRA = '''
         loader.classList.add('failed');
         loader.setAttribute('aria-busy', 'false');
         status.textContent = 'เปิดแอปไม่สำเร็จ';
+
+        // A missing WebAssembly on a current iPhone is not a broken build, a
+        // bad network or a stale cache: the engine is written in wasm and the
+        // browser has been told not to run any. Lockdown Mode switches off
+        // both wasm and WebGL together, which is the pair seen here. Saying
+        // so beats a generic failure the reader can do nothing about,
+        // because the fix is two taps and does not need the whole mode off.
+        var title = byId('skyfinder-err-title');
+        var hint = byId('skyfinder-err-hint');
+        if (typeof WebAssembly === 'undefined' && title && hint) {
+          title.textContent = 'เครื่องนี้ปิด WebAssembly ไว้';
+          hint.innerHTML = 'แอปวาดท้องฟ้าด้วย WebAssembly แต่เบราว์เซอร์นี้ถูกตั้งไม่ให้รันมัน ' +
+            'สาเหตุที่พบบ่อยที่สุดคือ <b>Lockdown Mode</b> ของ iOS ซึ่งปิด WebAssembly และ WebGL พร้อมกัน' +
+            '<br><br>อนุญาตเฉพาะเว็บนี้ได้โดยไม่ต้องปิดทั้งเครื่อง:' +
+            '<br>แตะปุ่ม <b>อา</b> ข้างช่องที่อยู่ → <b>การตั้งค่าเว็บไซต์</b> → ปิด <b>Lockdown Mode</b> สำหรับเว็บนี้' +
+            '<br><br>หรือปิดทั้งเครื่องที่ ตั้งค่า → ความเป็นส่วนตัวและความปลอดภัย → Lockdown Mode';
+        }
+
         detail.textContent = diagnostics();
         panel.hidden = false;
       };
@@ -477,6 +495,15 @@ BODY_EXTRA = '''
       }, 120);
 
       window.addEventListener('flutter-first-frame', succeed, { once: true });
+
+      // Counting to twenty-eight seconds is pointless when the engine cannot
+      // start at all. wasm is a hard requirement and its absence is knowable
+      // on the first tick, so say so straight away rather than running a
+      // progress bar the reader is meant to believe in.
+      if (typeof WebAssembly === 'undefined') {
+        record('เบราว์เซอร์นี้ไม่มี WebAssembly');
+        window.setTimeout(giveUp, 500);
+      }
 
       // ---- recovery ---------------------------------------------------
       var hardReset = function () {
