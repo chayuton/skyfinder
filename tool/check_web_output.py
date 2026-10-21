@@ -9,6 +9,7 @@ default icons and nothing would be red.
 import json
 import os
 import pathlib
+import re
 import sys
 
 
@@ -19,34 +20,35 @@ def build_config(js: str) -> dict | None:
     list of builds and a `.*?` would stop at the first inner brace while a
     greedy one would run to the end of the file.
     """
-    marker = js.find('buildConfig')
-    if marker == -1:
-        return None
-    start = js.find('{', marker)
-    if start == -1:
-        return None
-    depth, in_string, escaped = 0, False, False
-    for i in range(start, len(js)):
-        ch = js[i]
-        if in_string:
-            if escaped:
-                escaped = False
-            elif ch == '\\':
-                escaped = True
-            elif ch == '"':
-                in_string = False
-            continue
-        if ch == '"':
-            in_string = True
-        elif ch == '{':
-            depth += 1
-        elif ch == '}':
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(js[start:i + 1])
-                except json.JSONDecodeError:
-                    return None
+    # Flutter's own loader is inlined above the assignment and mentions
+    # buildConfig in its code, so the first occurrence of the name is a
+    # minified expression, not the object. Walk the real assignments from the
+    # last one back, since the config is appended after the loader.
+    starts = [m.end() - 1 for m in
+              re.finditer(r'buildConfig\s*=\s*\{', js)]
+    for start in reversed(starts):
+        depth, in_string, escaped = 0, False, False
+        for i in range(start, len(js)):
+            ch = js[i]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif ch == '\\':
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+            elif ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(js[start:i + 1])
+                    except json.JSONDecodeError:
+                        break
     return None
 
 
@@ -112,24 +114,27 @@ def main(out_dir: str) -> int:
         # headers and a splash that can report its own failure -- is worth
         # shipping either way. A flag that was passed and did not take effect
         # is a different matter, and fails.
-        expected = os.environ.get('SKYFINDER_EXPECT_LOCAL_CANVASKIT') == '1'
+        # Strict in CI, advisory on a deploy. A deploy that fails leaves the
+        # previous build serving users, so a check that blocks one had better
+        # be certain it is right -- and this one has already been wrong twice,
+        # once by matching a substring of Flutter's own source and once by
+        # parsing that source as JSON. CI is where a regression should stop,
+        # and CI runs this same script.
+        strict = os.environ.get('GITHUB_ACTIONS') == 'true'
         if cfg is None:
-            problems.append('cannot find _flutter.buildConfig in '
-                            'flutter_bootstrap.js, so the CanvasKit source '
-                            'cannot be verified')
-        elif cfg.get('useLocalCanvasKit') is True:
+            note = ('cannot find the _flutter.buildConfig assignment in '
+                    'flutter_bootstrap.js, so the CanvasKit source cannot be '
+                    'verified')
+        elif cfg.get('useLocalCanvasKit') is True or cfg.get('canvasKitBaseUrl'):
+            note = None
             checks.append('CanvasKit is served from our own origin')
-        elif expected:
-            problems.append(
-                'the build ran with --no-web-resources-cdn but the build '
-                'config still does not set useLocalCanvasKit, so the engine '
-                'will fetch CanvasKit from www.gstatic.com at runtime and the '
-                'app will not start on any device that cannot reach it')
         else:
-            warnings.append(
-                'this SDK could not be asked for a local CanvasKit, so the '
-                'engine will fetch it from www.gstatic.com at runtime and the '
-                'app will not start on any device that cannot reach it')
+            note = ('the build config neither sets useLocalCanvasKit nor a '
+                    'canvasKitBaseUrl, so the engine will fetch CanvasKit '
+                    'from www.gstatic.com at runtime and the app will not '
+                    'start on any device that cannot reach it')
+        if note is not None:
+            (problems if strict else warnings).append(note)
         for name in ('canvaskit/canvaskit.js', 'canvaskit/canvaskit.wasm'):
             need(name)
 

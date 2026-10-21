@@ -42,14 +42,19 @@ BUILD_ARGS=(--release)
 # it can tell "this SDK is too old to know the flag", which is worth a warning
 # and nothing more, apart from "the flag was passed and did not take", which
 # is a regression and fails the build.
-export SKYFINDER_EXPECT_LOCAL_CANVASKIT=0
-if flutter build web --help 2>&1 | grep -q -- '--no-web-resources-cdn'; then
+export SKYFINDER_EXPECT_LOCAL_CANVASKIT=1
+# The help text spells a negatable flag '--[no-]web-resources-cdn', so looking
+# for the literal '--no-web-resources-cdn' never matches and the build quietly
+# decides the SDK is too old. Match the stem.
+if flutter build web --help 2>&1 | grep -q -- 'web-resources-cdn'; then
   BUILD_ARGS+=(--no-web-resources-cdn)
-  export SKYFINDER_EXPECT_LOCAL_CANVASKIT=1
-  echo "==> CanvasKit will be served from our own origin"
+  echo "==> CanvasKit will be served from our own origin (--no-web-resources-cdn)"
 else
-  echo "==> WARNING: this SDK has no --no-web-resources-cdn;"
-  echo "    the build will depend on www.gstatic.com at runtime"
+  # Fallback for an SDK without the flag. The tool only adds its own gstatic
+  # FLUTTER_WEB_CANVASKIT_URL define when that define is not already set, so
+  # setting it here keeps the engine pointed at the copy we ship.
+  BUILD_ARGS+=(--dart-define=FLUTTER_WEB_CANVASKIT_URL=/canvaskit/)
+  echo "==> CanvasKit will be served from our own origin (dart-define)"
 fi
 
 flutter build web "${BUILD_ARGS[@]}"
