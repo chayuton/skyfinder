@@ -88,7 +88,7 @@ void main() {
     // out by a third of a day inside a single year, which is why the app
     // searches for every one of them instead.
     test('ช่วงสั้นที่สุดในกรอบ 2027 คือ 29.2938 วัน', () {
-      final a = phaseAfter(2461955.0, 0)!; // 2027-07-04
+      final a = phaseAfter(2461587.5, 0)!; // from 2027-07-01, finds 2027-07-04
       final b = phaseAfter(a + 1, 0)!; // 2027-08-02
       expect(b - a, closeTo(29.29375, 2 * tol));
     });
@@ -108,8 +108,13 @@ void main() {
         gaps.add(b - a);
         jd = a + 1;
       }
+      // Two years of lunations average about six minutes off the long-term
+      // constant, and that is the sample, not a fault: the interval swings on
+      // a cycle far longer than the window being averaged. The bound is set to
+      // catch a period that is systematically wrong, not to pretend 24 months
+      // converge on the mean.
       final mean = gaps.reduce((x, y) => x + y) / gaps.length;
-      expect(mean, closeTo(synodicMonth, 0.002));
+      expect(mean, closeTo(synodicMonth, 0.01));
       expect(gaps.reduce((x, y) => x < y ? x : y), greaterThan(29.2));
       expect(gaps.reduce((x, y) => x > y ? x : y), lessThan(29.9));
     });
@@ -118,10 +123,19 @@ void main() {
   group('แสงจันทร์ไม่ได้แปรผันตรงกับส่วนสว่าง', () {
     // Half the disc lit is not half the light: the lit area halves and the
     // albedo collapses as the surface shadows itself, leaving roughly a tenth.
-    // A linear penalty would write off every usable quarter-Moon evening.
+    // A linear penalty would write off every usable quarter-Moon evening, and
+    // a plain power of the illuminated fraction does not land here either —
+    // 0.5 squared is a quarter and 0.5 to the 2.4 is a fifth, both far too
+    // bright. These two figures are where the published sky-brightness models
+    // put it, and they come out of the engine's own magnitude law for free.
     test('จันทร์กึ่งดวงสว่างราว 9% ของจันทร์เพ็ญ', () {
       final half = moonGlare(0.5, 90) / moonGlare(1.0, 90);
-      expect(half, closeTo(0.09, 0.02));
+      expect(half, closeTo(0.091, 0.005));
+    });
+
+    test('จันทร์เสี้ยว 25% สว่างราว 2.6% ของจันทร์เพ็ญ', () {
+      final quarter = moonGlare(0.25, 90) / moonGlare(1.0, 90);
+      expect(quarter, closeTo(0.026, 0.004));
     });
 
     test('เสี้ยวบาง 10% แทบไม่มีผล', () {
@@ -160,10 +174,11 @@ void main() {
       final n = night(2461339.208333);
       expect(n.darkHours, closeTo(9.917, 0.05));
       expect(n.moonFreeHours, 0);
-      expect(n.effectiveDarkHours, closeTo(0.758, 0.05));
+      expect(n.effectiveDarkHours, closeTo(2.368, 0.05));
       expect(n.illum, closeTo(0.9944, 0.002));
       expect(n.moonAltMax, closeTo(85.5, 0.5));
-      expect(n.score, lessThan(0.1));
+      expect(n.score, lessThan(0.3));
+      expect(n.verdict, 'จันทร์ส่องเกือบทั้งคืน');
       expect(n.bestFrom, isNull);
     });
 
@@ -175,7 +190,9 @@ void main() {
       expect(n.bestFrom, isNotNull);
       expect(n.bestTo! - n.bestFrom!, closeTo(5.667 / 24, 0.01));
       // Glare weighting rescues the night that a strict moon-down count would
-      // have marked barely usable.
+      // have marked barely usable: 5.7 moonless hours, but a 43 per cent Moon
+      // over the rest costs so little that nearly the whole night counts.
+      expect(n.effectiveDarkHours, closeTo(9.893, 0.05));
       expect(n.effectiveDarkHours, greaterThan(n.moonFreeHours));
       expect(n.score, greaterThan(0.9));
     });

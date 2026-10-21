@@ -167,19 +167,27 @@ const double _nightStep = 5 / 1440.0;
 /// How much of a Full Moon's glare is in play, 0 to 1, for a Moon [illum] lit
 /// and [altDeg] above the horizon.
 ///
-/// The exponent is the part worth knowing: moonlight does not scale with the
-/// illuminated fraction. Half the disc lit is not half the light but about a
-/// tenth of it, because the lit area halves and the Moon's albedo collapses as
-/// the phase angle opens and the surface shadows itself. A linear penalty
-/// would throw away every usable quarter-Moon evening.
+/// Moonlight does not scale with the illuminated fraction, and not by a tidy
+/// power of it either. Half the disc lit is about a tenth of the light, not a
+/// half: the lit area halves, and on top of that the Moon's albedo collapses
+/// as the phase angle opens and the rough surface shadows itself. A linear
+/// penalty would throw away every usable quarter-Moon evening.
+///
+/// Rather than invent a curve, this runs the brightness law `bodyPosition`
+/// already uses for the Moon's magnitude backwards: recover the phase angle
+/// from the illuminated fraction, ask that law how many magnitudes fainter
+/// than Full the Moon is, and turn it back into a flux ratio. The two stay in
+/// step by construction, and it lands on 9.1 per cent at half and 2.6 per cent
+/// at a quarter, which is where the published sky-brightness models put it.
 ///
 /// The altitude ramp is a plain approximation of a real airmass-and-scattering
 /// term: a Moon sitting on the horizon lights the sky far less than one
 /// overhead, and one below it lights nothing at all.
 double moonGlare(double illum, double altDeg) {
   if (altDeg <= 0) return 0.0;
-  return math.pow(clampD(illum, 0, 1), 2.4).toDouble() *
-      clampD((altDeg + 5) / 45, 0, 1);
+  final a = math.acos(clampD(2 * clampD(illum, 0, 1) - 1, -1, 1)) * r2d;
+  final dm = 0.026 * a + 4e-9 * ipow(a, 4);
+  return math.pow(10, -0.4 * dm).toDouble() * clampD((altDeg + 5) / 45, 0, 1);
 }
 
 /// One night's worth of the things that decide whether it is worth going out.
