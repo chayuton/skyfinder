@@ -5,6 +5,7 @@ import '../engine/engine.dart';
 import '../engine/sky.dart';
 import '../painters/constellation_painter.dart';
 import '../state/app_state.dart';
+import 'calendar_view.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -299,6 +300,12 @@ class NightTabView extends StatelessWidget {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.only(top: 26, bottom: 2),
+          child: Text('วางแผนคืนถัดไป',
+              style: Theme.of(context).textTheme.labelSmall),
+        ),
+        MoonCalendarSection(s: s),
       ],
     );
   }
