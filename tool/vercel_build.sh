@@ -38,8 +38,14 @@ flutter pub get
 # build works fine on the developer's machine. The flag puts the same files
 # under our own origin, which we already serve and already cache.
 BUILD_ARGS=(--release)
+# Tells the output check whether a local CanvasKit was actually asked for, so
+# it can tell "this SDK is too old to know the flag", which is worth a warning
+# and nothing more, apart from "the flag was passed and did not take", which
+# is a regression and fails the build.
+export SKYFINDER_EXPECT_LOCAL_CANVASKIT=0
 if flutter build web --help 2>&1 | grep -q -- '--no-web-resources-cdn'; then
   BUILD_ARGS+=(--no-web-resources-cdn)
+  export SKYFINDER_EXPECT_LOCAL_CANVASKIT=1
   echo "==> CanvasKit will be served from our own origin"
 else
   echo "==> WARNING: this SDK has no --no-web-resources-cdn;"

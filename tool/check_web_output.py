@@ -7,13 +7,53 @@ without this a deploy could go out with Flutter's stock English page and
 default icons and nothing would be red.
 """
 import json
+import os
 import pathlib
 import sys
+
+
+def build_config(js: str) -> dict | None:
+    """Pull the object assigned to _flutter.buildConfig out of the bootstrap.
+
+    Brace matching rather than a regex, because the config carries a nested
+    list of builds and a `.*?` would stop at the first inner brace while a
+    greedy one would run to the end of the file.
+    """
+    marker = js.find('buildConfig')
+    if marker == -1:
+        return None
+    start = js.find('{', marker)
+    if start == -1:
+        return None
+    depth, in_string, escaped = 0, False, False
+    for i in range(start, len(js)):
+        ch = js[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == '\\':
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(js[start:i + 1])
+                except json.JSONDecodeError:
+                    return None
+    return None
 
 
 def main(out_dir: str) -> int:
     out = pathlib.Path(out_dir)
     problems = []
+    warnings = []
     checks = []
 
     def need(path: str) -> pathlib.Path | None:
@@ -59,14 +99,37 @@ def main(out_dir: str) -> int:
         # fetches before it can paint anything. Any device that cannot reach
         # that host sits on the splash forever while the build looks fine
         # everywhere else, so a deploy that would do it fails here instead.
-        if 'useLocalCanvasKit' in js:
+        #
+        # The flag has to be read out of the build config rather than looked
+        # for in the file. Flutter's own loader contains the source line
+        # `e.engineRevision && !e.useLocalCanvasKit`, so a plain substring
+        # test for the name matches every build ever produced and passes
+        # exactly when it should be failing.
+        cfg = build_config(js)
+        # Whether the build script was able to ask for a local CanvasKit at
+        # all. An SDK too old to know the flag is a thing to warn about, not
+        # a reason to block the deploy: the rest of this release -- the cache
+        # headers and a splash that can report its own failure -- is worth
+        # shipping either way. A flag that was passed and did not take effect
+        # is a different matter, and fails.
+        expected = os.environ.get('SKYFINDER_EXPECT_LOCAL_CANVASKIT') == '1'
+        if cfg is None:
+            problems.append('cannot find _flutter.buildConfig in '
+                            'flutter_bootstrap.js, so the CanvasKit source '
+                            'cannot be verified')
+        elif cfg.get('useLocalCanvasKit') is True:
             checks.append('CanvasKit is served from our own origin')
-        else:
+        elif expected:
             problems.append(
-                'flutter_bootstrap.js has no useLocalCanvasKit, so the engine '
+                'the build ran with --no-web-resources-cdn but the build '
+                'config still does not set useLocalCanvasKit, so the engine '
                 'will fetch CanvasKit from www.gstatic.com at runtime and the '
-                'app will not start on any device that cannot reach it '
-                '(build with --no-web-resources-cdn)')
+                'app will not start on any device that cannot reach it')
+        else:
+            warnings.append(
+                'this SDK could not be asked for a local CanvasKit, so the '
+                'engine will fetch it from www.gstatic.com at runtime and the '
+                'app will not start on any device that cannot reach it')
         for name in ('canvaskit/canvaskit.js', 'canvaskit/canvaskit.wasm'):
             need(name)
 
@@ -110,6 +173,8 @@ def main(out_dir: str) -> int:
     print('=== web output check ===')
     for c in checks:
         print('  ok   ' + c)
+    for w in warnings:
+        print('  WARN ' + w)
     for p in problems:
         print('  FAIL ' + p)
     if problems:
