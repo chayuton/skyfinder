@@ -5,8 +5,8 @@ import '../engine/orientation.dart';
 /// DeviceOrientation events instead, because no shipping browser lets a page
 /// read the magnetometer.
 abstract class OrientationSource {
-  /// True when [start] only gets anywhere from inside a tap: iOS Safari shows
-  /// its motion permission prompt for nothing else.
+  /// True when the browser may have to ask before it shares the sensors, and
+  /// so [start] only gets past a prompt from inside a tap.
   bool get needsTap;
 
   /// Listening for readings, whether or not a usable one has come yet.

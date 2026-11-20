@@ -10,11 +10,15 @@
 //   `deviceorientationabsolute`, whose alpha is measured from north.
 // * Safari, and every iOS browser since they all run WebKit, fire plain
 //   `deviceorientation` with alpha from an arbitrary zero plus a separate
-//   webkitCompassHeading, and only once DeviceOrientationEvent
-//   .requestPermission() has been answered, which WebKit will only ask from
-//   inside a tap. A page already allowed earlier in the session is answered
-//   without a tap, so the quiet attempt at launch picks that up.
+//   webkitCompassHeading.
 // * Any other `deviceorientation` that says it is absolute is taken as is.
+//
+// Where DeviceOrientationEvent.requestPermission() exists (WebKit, and
+// Chromium since version 151) events only flow once it has said "granted".
+// It answers at once, without a tap, when the user has already allowed
+// motion sensors, which is Chrome's default and what Safari remembers for
+// the rest of a session, so the quiet attempt at launch covers that; a
+// prompt can only be shown from inside a tap, which the compass provides.
 
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
@@ -95,8 +99,8 @@ class _BrowserOrientation implements OrientationSource {
     _ask(cls, quiet: quiet, onListening: onListening, onFailed: onFailed);
   }
 
-  /// WebKit treats every event a touch produces as part of the gesture, the
-  /// pointer events Flutter reads its taps from included, so asking straight
+  /// Browsers treat every event a touch produces as part of the gesture, the
+  /// pointerup Flutter delivers its taps from included, so asking straight
   /// from the tap is enough. Should some version turn that down anyway, the
   /// touchend and click that end a touch always count: from then on the
   /// request is made from the next one of those instead.
@@ -110,11 +114,16 @@ class _BrowserOrientation implements OrientationSource {
   }) {
     if (_asking) return;
     _asking = true;
-    // Called straight from the tap with nothing awaited first: WebKit only
-    // shows the prompt while it is still handling the touch.
+    // Called straight from the tap with nothing awaited first: a prompt is
+    // only shown while the browser is still handling the touch. Chromium
+    // also needs to be told the magnetometer is wanted, or it allows only
+    // the relative angles; WebKit takes no argument and ignores it.
     final JSPromise<JSAny?> answer;
     try {
-      answer = cls.callMethod<JSPromise<JSAny?>>('requestPermission'.toJS);
+      answer = globalContext.has('ondeviceorientationabsolute')
+          ? cls.callMethod<JSPromise<JSAny?>>(
+              'requestPermission'.toJS, true.toJS)
+          : cls.callMethod<JSPromise<JSAny?>>('requestPermission'.toJS);
     } catch (_) {
       _asking = false;
       if (!quiet) onFailed(_deniedNote);

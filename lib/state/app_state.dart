@@ -73,8 +73,9 @@ class AppState extends ChangeNotifier {
     });
     _restore();
     // The compass is on screen on every tab, so it starts by itself wherever
-    // no permission prompt is in the way. iOS Safari only prompts from a tap,
-    // but a page it already allowed this session gets going here as well.
+    // no permission prompt is in the way. A browser that asks first (Safari,
+    // Chrome set to ask) only prompts from a tap, but one the user already
+    // allowed answers this quiet attempt and gets going here as well.
     _beginSensors(quiet: _orientation.needsTap);
   }
 
@@ -320,14 +321,14 @@ class AppState extends ChangeNotifier {
   static const _waitingNote = 'กำลังรอค่าจากเข็มทิศ…';
   bool _hinted = false;
 
-  /// iOS Safari asks for motion access only from a tap, so until it has
-  /// been asked the compass says "tap" instead of a dash.
+  /// A browser that asks for motion access asks only from a tap, so until
+  /// it has been asked the compass says "tap" instead of a dash.
   bool get compassNeedsTap =>
       _orientation.needsTap && !sensorOn && !sensorStarting &&
       !_orientation.running;
 
   /// Starts the compass. Call it from a tap where there is one: that is the
-  /// only moment iOS Safari will show its permission prompt.
+  /// only moment a browser will show its permission prompt.
   void startSensors() {
     if (sensorOn) return;
     _beginSensors(quiet: false);

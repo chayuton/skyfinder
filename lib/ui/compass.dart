@@ -77,7 +77,7 @@ class _SkyCompassState extends State<SkyCompass> {
           label: semantic,
           child: GestureDetector(
             onTap: () {
-              // The first tap turns the compass on; iOS Safari will only ask
+              // The first tap turns the compass on; a browser will only ask
               // for motion access from inside a tap like this one. After
               // that a tap locks the map to it, or lets the map go.
               if (!s.sensorOn) {
