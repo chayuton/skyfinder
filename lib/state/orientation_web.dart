@@ -131,12 +131,15 @@ class _BrowserOrientation implements OrientationSource {
     }
     answer.toDart.then((value) {
       _asking = false;
-      if (value.dartify() == 'granted') {
+      final state = value.dartify();
+      if (state == 'granted') {
         _cancelRetry();
         _listen();
         onListening();
       } else if (!quiet) {
-        onFailed(_deniedNote);
+        // Chromium answers "prompt" when its prompt was dismissed unanswered;
+        // another tap asks again, which a denial does not.
+        onFailed(state == 'denied' ? _deniedNote : _tapAgainNote);
       }
     }, onError: (Object _) {
       _asking = false;
