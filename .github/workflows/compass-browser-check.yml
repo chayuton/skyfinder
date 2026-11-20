@@ -1,0 +1,34 @@
+# Temporary: runs the built web app in headless Chromium to check the compass.
+# Lives only on the compass-top-edge branch and is removed before merging.
+name: compass-browser-check
+
+on:
+  push:
+    branches: [compass-top-edge]
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: build web through the Vercel script
+        run: |
+          export FLUTTER_HOME="$(dirname "$(dirname "$(command -v flutter)")")"
+          bash tool/vercel_build.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: drive the compass in Chromium
+        run: |
+          mkdir -p /tmp/e2e && cd /tmp/e2e
+          npm init -y >/dev/null
+          npm i playwright@1 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          cp "$GITHUB_WORKSPACE/tool/compass_browser_check.mjs" .
+          (cd "$GITHUB_WORKSPACE/build/web" && python3 -m http.server 8080 >/dev/null 2>&1 &)
+          sleep 2
+          node compass_browser_check.mjs
