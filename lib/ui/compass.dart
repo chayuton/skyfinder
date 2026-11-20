@@ -2,29 +2,26 @@ import 'package:flutter/material.dart';
 
 import '../engine/engine.dart';
 import '../state/app_state.dart';
-import '../painters/sky_painter.dart';
 import 'theme.dart';
 
-/// Two pictures, two signs. The all-sky dome is drawn looking UP, so east
-/// falls on the left and the rose turns WITH the map; the aim view and a plain
-/// device compass look OUT, so the rose turns AGAINST the heading. Getting
-/// this backwards mirrors the needle, which is worse than showing no compass.
+/// The rose is a compass in the plain sense on every tab: the needle points
+/// at north as seen from the phone, and the fixed mark at the top stands for
+/// the top edge, so the figure underneath is the bearing that edge faces.
+/// That makes it something to hold the rest of the app against: the bearings
+/// in the lists and sheets, and the sky map.
+///
+/// It no longer turns with the map. The map is drawn looking UP, and locked
+/// to the compass it keeps the way the user faces at its lower edge, the way
+/// an all-sky chart held overhead is read; a rose turning with it pointed
+/// north back at a user who was facing north. Without a sensor the aim view
+/// is steered by hand, and the rose shows that bearing, greyed out.
 ({double rot, double? label, bool live}) compassReference(AppState s) {
-  switch (s.tab) {
-    case SkyTab.aim:
-      return (rot: -s.aimAz, label: s.aimAz, live: s.sensorOn);
-    case SkyTab.sky:
-      final facing = s.faceLock && s.heading != null;
-      return (
-        rot: mapRotation(s),
-        label: facing ? s.heading! : 0.0,
-        live: facing
-      );
-    default:
-      final dh = s.deviceHeading;
-      if (dh != null) return (rot: -dh, label: dh, live: true);
-      return (rot: 0.0, label: null, live: false);
+  final h = s.deviceHeading;
+  if (s.sensorOn && h != null) return (rot: -h, label: h, live: true);
+  if (s.tab == SkyTab.aim) {
+    return (rot: -s.aimAz, label: s.aimAz, live: false);
   }
+  return (rot: 0.0, label: null, live: false);
 }
 
 /// A 42px rose pinned above the tab bar. It fades while a list scrolls under
@@ -49,14 +46,26 @@ class _SkyCompassState extends State<SkyCompass> {
     // Unwrap so the needle never spins the long way round 360.
     _shown += norm180(r.rot - _shown);
 
-    final label = r.label == null
-        ? '—'
-        : '${norm360(r.label!).round()}° ${compassShort(r.label!)}';
-    final semantic = r.label == null
-        ? 'เข็มทิศ ยังไม่รู้ทิศ แตะเพื่อเปิดเซ็นเซอร์'
-        : 'เข็มทิศ หันไปทาง${compassTh(r.label!)} '
-            '${norm360(r.label!).round()} องศา '
-            'แตะเพื่อ${s.faceLock ? 'เลิกหมุนแผนที่ตามทิศ' : 'หมุนแผนที่ตามทิศที่หัน'}';
+    final String label;
+    final String semantic;
+    if (r.label != null) {
+      final deg = norm360(r.label!).round() % 360;
+      label = '$deg° ${compassShort(r.label!)}';
+      semantic = r.live
+          ? 'เข็มทิศ ขอบบนของมือถือหันไปทาง${compassTh(r.label!)} $deg องศา '
+              'แตะเพื่อ${s.faceLock ? 'เลิกหมุนแผนที่ตามทิศ' : 'หมุนแผนที่ตามทิศที่หัน'}'
+          : 'เข็มทิศ ยังไม่ได้เปิดเซ็นเซอร์ จุดเล็งอยู่ทาง${compassTh(r.label!)} '
+              '$deg องศา แตะเพื่อเปิดเซ็นเซอร์';
+    } else {
+      label = s.sensorStarting
+          ? '…'
+          : s.compassNeedsTap
+              ? 'แตะเปิด'
+              : '—';
+      semantic = s.sensorStarting
+          ? 'เข็มทิศ กำลังรอค่าจากเซ็นเซอร์'
+          : 'เข็มทิศ ยังไม่รู้ทิศ แตะเพื่อเปิดเซ็นเซอร์';
+    }
 
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 220),
@@ -68,8 +77,14 @@ class _SkyCompassState extends State<SkyCompass> {
           label: semantic,
           child: GestureDetector(
             onTap: () {
+              // The first tap turns the compass on; a browser will only ask
+              // for motion access from inside a tap like this one. After
+              // that a tap locks the map to it, or lets the map go.
+              if (!s.sensorOn) {
+                s.startSensors();
+                return;
+              }
               s.toggle('faceLock');
-              if (s.faceLock && s.heading == null) s.startSensors();
             },
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -157,6 +172,17 @@ class _RosePainter extends CustomPainter {
       ..close();
     canvas.drawPath(south, Paint()..color = c.down);
     canvas.restore();
+
+    // The lubber mark: fixed at the top, it stands for the phone's top edge,
+    // and the bearing under the rose is the one it faces. Facing north, the
+    // north tick sits right under it.
+    final mark = Path()
+      ..moveTo(20.4 * k, 0.4 * k)
+      ..lineTo(25.6 * k, 0.4 * k)
+      ..lineTo(23 * k, 4.6 * k)
+      ..close();
+    canvas.drawPath(
+        mark, Paint()..color = (live ? c.fg : c.muted).withOpacity(0.9));
 
     canvas.drawCircle(centre, 2.4 * k, Paint()..color = c.panel2);
     canvas.drawCircle(

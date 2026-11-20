@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:sensors_plus/sensors_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../engine/engine.dart';
+import '../engine/orientation.dart';
 import '../engine/sky.dart';
+import 'orientation_source.dart';
 
 enum SkyTab { sky, aim, con, list, night, settings }
 
@@ -52,17 +52,19 @@ class AppState extends ChangeNotifier {
   String conFilter = 'now';
 
   // sensors
-  bool sensorOn = false;
+  bool sensorOn = false;       // readings are live
+  bool sensorStarting = false; // waiting on a permission prompt or a reading
   String sensorNote = '';
-  double? heading;        // where the back of the phone points
-  double? deviceHeading;  // what a plain compass would read
+  /// Compass bearing of the top edge of the phone: what the compass shows,
+  /// and what the sky map turns to when locked to the compass.
+  double? deviceHeading;
+  /// Where the camera, out of the back of the phone, points: the aim view.
   double aimAlt = 40;
   double aimAz = 90;
   bool wakeOn = false;
 
-  Timer? _clock;
-  StreamSubscription? _accSub, _magSub;
-  List<double>? _acc, _mag;
+  final OrientationSource _orientation = createOrientationSource();
+  Timer? _clock, _sensorWait, _publish;
 
   AppState() {
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -70,20 +72,51 @@ class AppState extends ChangeNotifier {
       notifyListeners();
     });
     _restore();
+    // The compass is on screen on every tab, so it starts by itself wherever
+    // no permission prompt is in the way. A browser that asks first (Safari,
+    // Chrome set to ask) only prompts from a tap, but one the user already
+    // allowed answers this quiet attempt and gets going here as well.
+    _beginSensors(quiet: _orientation.needsTap);
   }
 
   @override
   void dispose() {
     _clock?.cancel();
-    _accSub?.cancel();
-    _magSub?.cancel();
+    _sensorWait?.cancel();
+    _publish?.cancel();
+    _orientation.stop();
     super.dispose();
   }
 
   DateTime get now => _now.add(Duration(minutes: offsetMinutes));
   double get jd => jdFromMs(now.millisecondsSinceEpoch);
 
-  Scene scene() => buildScene(jd, lat, lon, height);
+  Scene? _scene;
+  double _sceneJd = double.nan, _sceneLat = double.nan;
+  double _sceneLon = double.nan, _sceneH = double.nan;
+
+  /// The tree rebuilds for compass updates as well as clock ticks, and a
+  /// scene places every star, so it is reused until the time or the place
+  /// actually changes.
+  Scene scene() {
+    final t = jd;
+    final cached = _scene;
+    if (cached != null &&
+        t == _sceneJd &&
+        lat == _sceneLat &&
+        lon == _sceneLon &&
+        height == _sceneH) {
+      return cached;
+    }
+    final fresh = buildScene(t, lat, lon, height);
+    _scene = fresh;
+    _sceneJd = t;
+    _sceneLat = lat;
+    _sceneLon = lon;
+    _sceneH = height;
+    return fresh;
+  }
+
   Almanac get alm => almanac(now, lat, lon, height);
 
   // ---------------- persistence ----------------
@@ -148,6 +181,8 @@ class AppState extends ChangeNotifier {
     }
     _save();
     notifyListeners();
+    // Locking the map to a compass that is not running would do nothing.
+    if (key == 'faceLock' && faceLock && !sensorOn) startSensors();
   }
 
   void setMagLimit(double v) {
@@ -283,89 +318,138 @@ class AppState extends ChangeNotifier {
 
   // ---------------- orientation ----------------
 
-  /// Orientation is derived from the accelerometer and magnetometer rather
-  /// than a prebuilt orientation stream, because those two are the sensors
-  /// every phone exposes. This is the same construction Android's
-  /// SensorManager.getRotationMatrix uses.
+  static const _waitingNote = 'กำลังรอค่าจากเข็มทิศ…';
+  bool _hinted = false;
+
+  /// A browser that asks for motion access asks only from a tap, so until
+  /// it has been asked the compass says "tap" instead of a dash.
+  bool get compassNeedsTap =>
+      _orientation.needsTap && !sensorOn && !sensorStarting &&
+      !_orientation.running;
+
+  /// Starts the compass. Call it from a tap where there is one: that is the
+  /// only moment a browser will show its permission prompt.
   void startSensors() {
     if (sensorOn) return;
-    sensorNote = 'กำลังรอค่าจากเข็มทิศ…';
-    notifyListeners();
+    _beginSensors(quiet: false);
+  }
 
-    _accSub = accelerometerEventStream().listen((e) {
-      _acc = [e.x, e.y, e.z];
-      _fuse();
-    }, onError: (_) {
-      sensorNote = 'อ่านเซ็นเซอร์ความเร่งไม่ได้ ใช้แถบเลื่อนปรับเองด้านล่างแทน';
+  void _beginSensors({required bool quiet}) {
+    _hinted = false;
+    if (!quiet) {
+      sensorStarting = true;
+      sensorNote = _waitingNote;
       notifyListeners();
-    });
-
-    _magSub = magnetometerEventStream().listen((e) {
-      _mag = [e.x, e.y, e.z];
-      _fuse();
-    }, onError: (_) {
-      sensorNote = 'เครื่องนี้ไม่มีเข็มทิศ ใช้แถบเลื่อนปรับเองด้านล่างแทน';
-      notifyListeners();
-    });
-
-    Timer(const Duration(seconds: 3), () {
-      if (!sensorOn) {
-        sensorNote = 'ยังไม่ได้ค่าจากเซ็นเซอร์ เครื่องนี้อาจไม่มีเข็มทิศ '
-            'ใช้แถบเลื่อน "ปรับเอง" ด้านล่างกวาดหาดาวได้';
-        notifyListeners();
-      }
-    });
+    }
+    _orientation.start(
+      onAxes: _onAxes,
+      onListening: _onListening,
+      onFailed: _onSensorFailed,
+      onHint: _onSensorHint,
+      quiet: quiet,
+    );
   }
 
   void stopSensors() {
-    _accSub?.cancel();
-    _magSub?.cancel();
-    _accSub = null;
-    _magSub = null;
+    _orientation.stop();
+    _sensorWait?.cancel();
+    _publish?.cancel();
+    _publish = null;
+    _hinted = false;
     sensorOn = false;
+    sensorStarting = false;
     notifyListeners();
   }
 
-  void _fuse() {
-    final a = _acc, m = _mag;
-    if (a == null || m == null) return;
+  void _onListening() {
+    if (sensorOn) return;
+    sensorStarting = true;
+    if (!_hinted) sensorNote = _waitingNote;
+    _sensorWait?.cancel();
+    _sensorWait = Timer(const Duration(seconds: 3), () {
+      // A hint (hold the phone flat, wave a figure eight) means readings are
+      // arriving and only need a moment, so the compass keeps waiting.
+      if (sensorOn || _hinted) return;
+      sensorStarting = false;
+      sensorNote = 'ยังไม่ได้ค่าจากเซ็นเซอร์ เครื่องนี้อาจไม่มีเข็มทิศ '
+          'ใช้แถบเลื่อน "ปรับเอง" ด้านล่างกวาดหาดาวได้';
+      notifyListeners();
+    });
+    notifyListeners();
+  }
 
-    // H = m x a points east, M = a x H points north, a itself points up.
-    final hx = m[1] * a[2] - m[2] * a[1];
-    final hy = m[2] * a[0] - m[0] * a[2];
-    final hz = m[0] * a[1] - m[1] * a[0];
-    final hn = math.sqrt(hx * hx + hy * hy + hz * hz);
-    final an = math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
-    if (hn < 0.1 || an < 0.1) return; // free fall, or a magnet nearby
+  void _onSensorFailed(String note) {
+    _sensorWait?.cancel();
+    sensorStarting = false;
+    sensorNote = note;
+    notifyListeners();
+  }
 
-    final ex = hx / hn, ey = hy / hn, ez = hz / hn;
-    final ax = a[0] / an, ay = a[1] / an, az = a[2] / an;
-    // North = up x east, in device coordinates. Only the y and z components
-    // are read below, since the device x axis is never projected.
-    final ny = az * ex - ax * ez;
-    final nz = ax * ey - ay * ex;
+  void _onSensorHint(String note) {
+    if (sensorOn) return;
+    _hinted = true;
+    sensorStarting = true;
+    sensorNote = note;
+    notifyListeners();
+  }
 
-    // The back of the phone is device -Z; in world terms that is
-    // (-E.z, -N.z, -Up.z).
-    final bE = -ez, bN = -nz, bU = -az;
-    final alt = math.asin(clampD(bU, -1, 1)) * r2d;
-    final azim = norm360(math.atan2(bE, bN) * r2d);
-
-    aimAlt = clampD(alt, -20, 90);
-    aimAz = azim;
-    heading = azim;
-
-    // Held flat, the top edge of the phone is the compass; raised at the sky
-    // that edge points at nothing, so fall back to the back of the phone.
-    final tE = ey, tN = ny;
-    deviceHeading = math.sqrt(tE * tE + tN * tN) > math.sqrt(bE * bE + bN * bN)
-        ? norm360(math.atan2(tE, tN) * r2d)
-        : azim;
-
+  void _onAxes(Axes axes) {
+    final p = pointingOf(axes);
+    _cameraAlt = p.cameraAlt;
+    aimAlt = clampD(p.cameraAlt, -20, 90);
+    aimAz = p.cameraAz;
+    // Stood on its side the phone has no top edge to read; holding the last
+    // bearing beats a needle that swings a quarter turn.
+    final h = p.heading;
+    if (h != null) deviceHeading = h;
     if (!sensorOn) {
       sensorOn = true;
+      sensorStarting = false;
+      _sensorWait?.cancel();
       sensorNote = 'เปิดเซ็นเซอร์แล้ว ยกมือถือขึ้นชี้ฟ้าได้เลย';
+      _publishNow();
+      return;
     }
+    _publishSoon();
+  }
+
+  // A browser fires orientation events at the display rate and every
+  // notification rebuilds the whole tree, so readings are passed on at most
+  // about sixteen times a second and only once they have moved by more than
+  // the screen can show.
+  static const _publishGap = Duration(milliseconds: 60);
+  DateTime _published = DateTime.fromMillisecondsSinceEpoch(0);
+  double? _shownHeading;
+  double _cameraAlt = 0, _shownAlt = 0, _shownAz = 0;
+
+  bool get _orientationMoved {
+    final h = deviceHeading, shown = _shownHeading;
+    if (h != null && (shown == null || norm180(h - shown).abs() >= 0.3)) {
+      return true;
+    }
+    // Measured as an angle on the sky, so the bearing of a camera pointed
+    // straight down, which is noise, does not count as movement.
+    return angSep(_cameraAlt, aimAz, _shownAlt, _shownAz) >= 0.2;
+  }
+
+  void _publishSoon() {
+    if (_publish != null || !_orientationMoved) return;
+    final wait = _publishGap - DateTime.now().difference(_published);
+    if (wait <= Duration.zero) {
+      _publishNow();
+      return;
+    }
+    _publish = Timer(wait, () {
+      _publish = null;
+      if (_orientationMoved) _publishNow();
+    });
+  }
+
+  void _publishNow() {
+    _published = DateTime.now();
+    _shownHeading = deviceHeading;
+    _shownAlt = _cameraAlt;
+    _shownAz = aimAz;
     notifyListeners();
   }
 

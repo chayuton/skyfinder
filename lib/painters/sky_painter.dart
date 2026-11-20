@@ -21,8 +21,13 @@ double dot3(List<double> a, List<double> b) =>
 
 /// With the map locked to the compass, the direction the observer faces sits at
 /// the bottom of the dome, so the top of the dome is that heading plus 180.
-double mapRotation(AppState s) =>
-    (s.faceLock && s.heading != null) ? s.heading! - 180 : 0;
+/// The heading is the compass bearing of the phone's top edge, which stays
+/// steady with the phone flat in the hand; the camera bearing used before
+/// spun at random there, because the camera then points at the ground.
+double mapRotation(AppState s) {
+  final h = s.deviceHeading;
+  return (s.faceLock && s.sensorOn && h != null) ? h - 180 : 0;
+}
 
 /// The dome is drawn looking UP: the zenith is the centre, the horizon the rim,
 /// and east falls on the LEFT, the way an all-sky chart held overhead reads.
@@ -87,7 +92,8 @@ class SkyDomePainter extends CustomPainter {
 
   SkyDomePainter(this.sc, this.s, this.c)
       : sig = '${sc.jd}|${s.lat}|${s.lon}|${s.height}|${s.magLim}|${s.lines}'
-            '|${s.names}|${s.milky}|${s.ecliptic}|${s.faceLock}|${s.heading}'
+            '|${s.names}|${s.milky}|${s.ecliptic}'
+            '|${mapRotation(s).toStringAsFixed(1)}'
             '|${s.selected?.kind}${s.selected?.id}|${s.nightMode}';
 
   @override
