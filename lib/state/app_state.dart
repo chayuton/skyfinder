@@ -363,7 +363,7 @@ class AppState extends ChangeNotifier {
   void _onListening() {
     if (sensorOn) return;
     sensorStarting = true;
-    if (sensorNote.isEmpty) sensorNote = _waitingNote;
+    if (!_hinted) sensorNote = _waitingNote;
     _sensorWait?.cancel();
     _sensorWait = Timer(const Duration(seconds: 3), () {
       // A hint (hold the phone flat, wave a figure eight) means readings are

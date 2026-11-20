@@ -26,6 +26,8 @@ OrientationSource createOrientationSource() => _BrowserOrientation();
 
 const _deniedNote = 'ไม่ได้รับอนุญาตให้ใช้เซ็นเซอร์ทิศทาง ปิดแท็บแล้วเปิดหน้าเว็บใหม่ '
     'แล้วแตะเข็มทิศอีกครั้ง หรือใช้แถบเลื่อน "ปรับเอง" ด้านล่างแทน';
+const _tapAgainNote =
+    'แตะเข็มทิศอีกครั้งเพื่อให้เครื่องถามสิทธิ์ใช้เซ็นเซอร์ทิศทาง';
 
 class _BrowserOrientation implements OrientationSource {
   JSFunction? _listener;
@@ -85,6 +87,27 @@ class _BrowserOrientation implements OrientationSource {
       onListening();
       return;
     }
+    if (!quiet && _tapsAreNotGestures) {
+      _askOnNextGesture(cls, onListening, onFailed);
+      onFailed(_tapAgainNote);
+      return;
+    }
+    _ask(cls, quiet: quiet, onListening: onListening, onFailed: onFailed);
+  }
+
+  /// WebKit treats every event a touch produces as part of the gesture, the
+  /// pointer events Flutter reads its taps from included, so asking straight
+  /// from the tap is enough. Should some version turn that down anyway, the
+  /// touchend and click that end a touch always count: from then on the
+  /// request is made from the next one of those instead.
+  bool _tapsAreNotGestures = false;
+
+  void _ask(
+    JSObject cls, {
+    required bool quiet,
+    required void Function() onListening,
+    required void Function(String note) onFailed,
+  }) {
     if (_asking) return;
     _asking = true;
     // Called straight from the tap with nothing awaited first: WebKit only
@@ -100,6 +123,7 @@ class _BrowserOrientation implements OrientationSource {
     answer.toDart.then((value) {
       _asking = false;
       if (value.dartify() == 'granted') {
+        _cancelRetry();
         _listen();
         onListening();
       } else if (!quiet) {
@@ -107,12 +131,42 @@ class _BrowserOrientation implements OrientationSource {
       }
     }, onError: (Object _) {
       _asking = false;
-      // WebKit refuses to ask at all without a tap. That is the expected
+      // WebKit refuses to ask at all outside a gesture. That is the expected
       // answer to the quiet attempt at launch: the compass waits for a tap.
-      if (!quiet) {
-        onFailed('แตะเข็มทิศอีกครั้งเพื่อให้เครื่องถามสิทธิ์ใช้เซ็นเซอร์ทิศทาง');
-      }
+      if (quiet) return;
+      _tapsAreNotGestures = true;
+      _askOnNextGesture(cls, onListening, onFailed);
+      onFailed(_tapAgainNote);
     });
+  }
+
+  JSFunction? _retryListener;
+  static const _gestureEnds = ['touchend', 'click'];
+
+  void _askOnNextGesture(JSObject cls, void Function() onListening,
+      void Function(String note) onFailed) {
+    if (_retryListener != null) return;
+    void onGesture(JSObject _) {
+      _cancelRetry();
+      _ask(cls, quiet: false, onListening: onListening, onFailed: onFailed);
+    }
+
+    final listener = onGesture.toJS;
+    _retryListener = listener;
+    for (final type in _gestureEnds) {
+      globalContext.callMethod<JSAny?>(
+          'addEventListener'.toJS, type.toJS, listener, true.toJS);
+    }
+  }
+
+  void _cancelRetry() {
+    final l = _retryListener;
+    if (l == null) return;
+    _retryListener = null;
+    for (final type in _gestureEnds) {
+      globalContext.callMethod<JSAny?>(
+          'removeEventListener'.toJS, type.toJS, l, true.toJS);
+    }
   }
 
   void _listen() {
@@ -133,6 +187,7 @@ class _BrowserOrientation implements OrientationSource {
           'removeEventListener'.toJS, _eventName.toJS, l);
     }
     _listener = null;
+    _cancelRetry();
     _lastHint = '';
     _calibration.reset();
   }
